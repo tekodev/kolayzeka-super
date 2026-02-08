@@ -94,6 +94,14 @@ class AppsController extends Controller
         $identityPath1 = storage_path('app/public/luna_identity.jpg');
         $identityPath2 = storage_path('app/public/luna_face.png');
         
+        // Auto-restore if missing in storage but present in public assets (for production deploy)
+        if (!file_exists($identityPath1) && file_exists(public_path('luna-assets/luna_identity.jpg'))) {
+            copy(public_path('luna-assets/luna_identity.jpg'), $identityPath1);
+        }
+        if (!file_exists($identityPath2) && file_exists(public_path('luna-assets/luna_face.png'))) {
+            copy(public_path('luna-assets/luna_face.png'), $identityPath2);
+        }
+
         // Ensure files exist
         if (!file_exists($identityPath1) || !file_exists($identityPath2)) {
             Log::error('Luna Identity Image(s) missing.');
