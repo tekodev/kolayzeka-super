@@ -1,0 +1,126 @@
+import React from 'react';
+
+interface ResultDisplayProps {
+    generation: any;
+    error?: string;
+    onCreateVideo?: () => void; // Callback to show video form
+}
+
+export default function ResultDisplay({ generation, error, onCreateVideo }: ResultDisplayProps) {
+    const [isHovering, setIsHovering] = React.useState(false);
+    const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+        const x = ((e.clientX - left) / width) * 100;
+        const y = ((e.clientY - top) / height) * 100;
+        setMousePosition({ x, y });
+    };
+
+    if (error) {
+        return (
+            <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-center gap-3">
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium">{error}</span>
+            </div>
+        );
+    }
+
+    if (!generation) return null;
+
+    return (
+        <div className="bg-white shadow-xl sm:rounded-2xl border border-indigo-100 overflow-hidden animate-fade-in-up">
+            <div className="bg-indigo-600 px-8 py-4 flex justify-between items-center">
+                <h3 className="text-white font-bold flex items-center gap-2 uppercase tracking-widest text-sm">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" />
+                    </svg>
+                    Generated Magic
+                </h3>
+                <span className="px-3 py-1 bg-white/20 backdrop-blur rounded-full text-white text-[10px] uppercase font-black">
+                    {generation.status}
+                </span>
+            </div>
+            <div className="p-8">
+                <div className="flex justify-center bg-gray-50 rounded-2xl p-4 min-h-[300px] items-center border border-gray-100 overflow-hidden relative group">
+                    {generation.output_data?.result ? (
+                        <div 
+                            className="relative overflow-hidden rounded-xl shadow-2xl cursor-zoom-in w-full max-w-lg mx-auto"
+                            onMouseMove={handleMouseMove}
+                            onMouseEnter={() => setIsHovering(true)}
+                            onMouseLeave={() => setIsHovering(false)}
+                            onClick={() => window.open(generation.output_data.result, '_blank')}
+                        >
+                            {/* Check if result is video or image */}
+                            {typeof generation.output_data.result === 'string' && generation.output_data.result.match(/\.(mp4|webm)$/) ? (
+                                <video 
+                                    src={generation.output_data.result} 
+                                    className="w-full h-auto rounded-xl"
+                                    controls
+                                    autoPlay
+                                    loop
+                                    muted
+                                />
+                            ) : (
+                                <img 
+                                    src={typeof generation.output_data.result === 'string' ? generation.output_data.result : ''} 
+                                    className="w-full h-auto object-cover transition-transform duration-200 ease-out"
+                                    style={{
+                                        transformOrigin: `${mousePosition.x}% ${mousePosition.y}%`,
+                                        transform: isHovering ? 'scale(2.5)' : 'scale(1)',
+                                    }}
+                                    alt="Generated Outcome"
+                                />
+                            )}
+                        </div>
+                    ) : generation.status === 'processing' ? (
+                        <div className="text-center space-y-4">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                            <p className="text-indigo-600 font-medium animate-pulse">
+                                Sihir hazırlanıyor... Lütfen bekleyin.
+                            </p>
+                            <p className="text-xs text-gray-400">Video oluşturma 1-6 dakika sürebilir.</p>
+                        </div>
+                    ) : (
+                        <div className="text-center space-y-2">
+                            <p className="text-gray-400 font-medium">Data not visual or failed.</p>
+                            <pre className="text-[10px] text-left bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto max-w-full">
+                                {JSON.stringify(generation.output_data, null, 2)}
+                            </pre>
+                        </div>
+                    )}
+                </div>
+                
+                {/* Create Video Button */}
+                {generation.output_data?.result && onCreateVideo && (
+                    <div className="mt-6 flex justify-center">
+                        <button
+                            onClick={onCreateVideo}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            Video Oluştur
+                        </button>
+                    </div>
+                )}
+                
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                        <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Maliyet</p>
+                        <p className="text-lg font-bold text-indigo-700">{generation.user_credit_cost} Kredi</p>
+                    </div>
+                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                        <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Oluşturulma Tarihi</p>
+                        <p className="text-sm font-bold text-gray-700">
+                            {new Date(generation.created_at).toLocaleString()}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
