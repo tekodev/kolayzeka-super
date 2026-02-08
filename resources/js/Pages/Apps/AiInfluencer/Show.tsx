@@ -53,6 +53,7 @@ export default function AiInfluencerShow({ auth }: { auth: any }) {
                      // @ts-ignore
                      router.reload({ 
                         only: ['generation'],
+                        // @ts-ignore
                         preserveScroll: true,
                         preserveState: true 
                      });

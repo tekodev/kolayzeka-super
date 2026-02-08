@@ -51,6 +51,7 @@ export default function LunaInfluencerShow({ auth }: { auth: any }) {
             const interval = setInterval(() => {
                 router.reload({ 
                     only: ['latest_generation'],
+                    // @ts-ignore
                     preserveScroll: true,
                     preserveState: true,
                     onSuccess: (page) => {
