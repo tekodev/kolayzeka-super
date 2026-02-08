@@ -62,10 +62,16 @@ class User extends Authenticatable
 
     public function canAccessPanel(\Filament\Panel $panel): bool
     {
-        // For simple restricted access:
-        // return $this->hasRole('admin') || $this->email === 'admin@kolayzeka.com';
-        // Since roles are not seeded yet, allowing all for dev or check email.
-        return true; 
-        // TODO: Enforce role check: return $this->hasRole('admin');
+        // Allow access if user has 'admin' role OR has specific email
+        // Also check if role is seeded before checking role to avoid errors in fresh install
+        if ($this->hasRole('admin')) {
+            return true;
+        }
+
+        return in_array($this->email, [
+            'admin@kolayzeka.com',
+            'mehtap@kolayzeka.com',
+            'burak@kolayzeka.com', // Added for potential dev access
+        ]);
     }
 }
