@@ -17,30 +17,10 @@ export default function ResultDisplay({ generation, error, onCreateVideo }: Resu
         setMousePosition({ x, y });
     };
 
-    const handleDownload = async () => {
-        const url = generation.output_data?.result;
-        if (!url) return;
-
-        try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('Network response was not ok');
-            const blob = await response.blob();
-            const blobUrl = window.URL.createObjectURL(blob);
-            
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            // Determine extension
-            const isVideo = url.match(/\.(mp4|webm)(\?|$)/);
-            const ext = isVideo ? 'mp4' : 'jpg';
-            a.download = `generated-${generation.id}.${ext}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(blobUrl);
-        } catch (error) {
-            console.error('Download failed:', error);
-            window.open(url, '_blank');
-        }
+    const handleDownload = () => {
+        if (!generation.id) return;
+        // Use the backend proxy route to handle CORS and Content-Disposition
+        window.location.href = route('apps.download', { generation: generation.id });
     };
 
     if (error) {

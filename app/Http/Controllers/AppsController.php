@@ -660,4 +660,65 @@ Absolute realism and maximum fidelity to all reference images.";
     }
     }
 
+    public function download(\App\Models\Generation $generation)
+    {
+        // AUTHORIZATION: Ensure user owns the generation
+        if ($generation->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $url = $generation->output_data['result'] ?? null;
+
+        if (!$url) {
+            abort(404);
+        }
+
+        // Handle S3 URLs
+        if (str_contains($url, 'amazonaws.com') || str_contains($url, 'digitaloceanspaces.com')) {
+            // Extract the relative path from the full URL
+            $path = parse_url($url, PHP_URL_PATH);
+            $path = ltrim($path, '/'); // Remove leading slash
+             
+            // If the path includes the bucket name (in path-style URLs), remove it
+             // Laravel Storage needs the path relative to the disk root.
+            
+            // However, since we are using Storage::disk('s3')->url(), let's try to reverse it or just store the path in DB too.
+            // Assuming the URL matches our storage config. 
+            // A safer way is to rely on what we stored. In executeGoogle/Fal, we stored: 'generations/...'
+            
+            // Let's look at how we saved it.
+            // In ProviderApiService: $fileName = 'generations/' . $fileBase . '.jpg';
+            // So if URL is https://bucket.s3.../generations/xyz.jpg, the path is generations/xyz.jpg
+            
+             if (preg_match('/(generations\/.*)/', $path, $matches)) {
+                $relativePath = $matches[1];
+            } else {
+                 // Fallback: try to just use the path
+                 $relativePath = $path;
+            }
+
+            if (!\Storage::disk('s3')->exists($relativePath)) {
+                // If we can't find it by path, maybe it is an external URL (Fal.ai sometimes returns their own URL)
+                if (str_contains($url, 'fal.media') || str_contains($url, 'replicate.delivery')) {
+                     return redirect()->away($url);
+                }
+                abort(404, 'File not found in storage');
+            }
+
+            // Generate a temporary signed URL with Content-Disposition: attachment
+            return redirect()->to(
+                \Storage::disk('s3')->temporaryUrl(
+                    $relativePath,
+                    now()->addMinutes(5),
+                    [
+                        'ResponseContentDisposition' => 'attachment; filename="generated-' . $generation->id . '.' . pathinfo($relativePath, PATHINFO_EXTENSION) . '"',
+                    ]
+                )
+            );
+        }
+
+        // If it's an external URL (e.g. from Fal.ai directly if not uploaded to S3 yet)
+        return redirect()->away($url);
+    }
+
 }

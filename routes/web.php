@@ -36,6 +36,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/apps/luna-influencer', [AppsController::class, 'showLunaInfluencer'])->name('apps.luna-influencer.show');
     Route::post('/apps/luna-influencer/generate', [AppsController::class, 'generateLunaInfluencer'])->name('apps.luna-influencer.generate');
 
+    Route::get('/apps/download/{generation}', [AppsController::class, 'download'])->name('apps.download');
+
     Route::get('/apps/ai-influencer', [AppsController::class, 'showAiInfluencer'])->name('apps.ai-influencer.show');
     Route::post('/apps/ai-influencer/generate', [AppsController::class, 'generateAiInfluencer'])->name('apps.ai-influencer.generate');
     Route::post('/apps/ai-influencer/generate-video', [AppsController::class, 'generateAiVideo'])->name('apps.ai-influencer.generate-video');
