@@ -662,14 +662,19 @@ Absolute realism and maximum fidelity to all reference images.";
 
     public function download(\App\Models\Generation $generation)
     {
+        Log::info('[AppsController] Download requested', ['generation_id' => $generation->id, 'user_id' => auth()->id()]);
+
         // AUTHORIZATION: Ensure user owns the generation
         if ($generation->user_id !== auth()->id()) {
+            Log::warning('[AppsController] Download 403: Unauthorized');
             abort(403);
         }
 
         $url = $generation->output_data['result'] ?? null;
+        Log::info('[AppsController] Download URL', ['url' => $url]);
 
         if (!$url) {
+            Log::warning('[AppsController] Download 404: No URL');
             abort(404);
         }
 
@@ -678,31 +683,34 @@ Absolute realism and maximum fidelity to all reference images.";
             // Extract the relative path from the full URL
             $path = parse_url($url, PHP_URL_PATH);
             $path = ltrim($path, '/'); // Remove leading slash
-             
-            // If the path includes the bucket name (in path-style URLs), remove it
-             // Laravel Storage needs the path relative to the disk root.
             
-            // However, since we are using Storage::disk('s3')->url(), let's try to reverse it or just store the path in DB too.
-            // Assuming the URL matches our storage config. 
-            // A safer way is to rely on what we stored. In executeGoogle/Fal, we stored: 'generations/...'
+            Log::info('[AppsController] Parsed Path', ['path' => $path]);
             
-            // Let's look at how we saved it.
-            // In ProviderApiService: $fileName = 'generations/' . $fileBase . '.jpg';
-            // So if URL is https://bucket.s3.../generations/xyz.jpg, the path is generations/xyz.jpg
+            // Try to match specific patterns or use raw path
+            $relativePath = $path;
             
-             if (preg_match('/(generations\/.*)/', $path, $matches)) {
-                $relativePath = $matches[1];
-            } else {
-                 // Fallback: try to just use the path
-                 $relativePath = $path;
-            }
+            // Fix: If path starts with "uploads/", keep it.
+            // Our previous regex '/(generations\/.*)/' might have stripped 'uploads/' if it was present before 'generations/'
+            // resulting in a wrong path.
+            
+            Log::info('[AppsController] Checking S3 existence', ['relativePath' => $relativePath]);
 
             if (!\Storage::disk('s3')->exists($relativePath)) {
+                Log::warning('[AppsController] Download 404: S3 file not found', ['bucket_check' => $relativePath]);
+                
                 // If we can't find it by path, maybe it is an external URL (Fal.ai sometimes returns their own URL)
                 if (str_contains($url, 'fal.media') || str_contains($url, 'replicate.delivery')) {
                      return redirect()->away($url);
                 }
-                abort(404, 'File not found in storage');
+                
+                // Allow fallback if "uploads/" prefix is the issue vs missing it
+                $altPath = str_replace('uploads/', '', $relativePath);
+                if (\Storage::disk('s3')->exists($altPath)) {
+                    Log::info('[AppsController] Found at alternative path', ['altPath' => $altPath]);
+                    $relativePath = $altPath;
+                } else {
+                    abort(404, 'File not found in storage');
+                }
             }
 
             // Generate a temporary signed URL with Content-Disposition: attachment
