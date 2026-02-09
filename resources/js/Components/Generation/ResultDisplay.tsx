@@ -18,9 +18,15 @@ export default function ResultDisplay({ generation, error, onCreateVideo }: Resu
     };
 
     const handleDownload = () => {
-        if (!generation.id) return;
-        // Use the backend proxy route to handle CORS and Content-Disposition
-        window.location.href = route('apps.download', { generation: generation.id });
+        console.log('Download Debug:', generation);
+        if (!generation.id) {
+            console.error('Download aborted: No ID found in generation object');
+            return;
+        }
+        // Manual URL construction to avoid potential Ziggy issues
+        const url = `/apps/download/${generation.id}`;
+        console.log('Navigating to:', url);
+        window.location.href = url;
     };
 
     if (error) {
