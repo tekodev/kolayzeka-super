@@ -145,6 +145,8 @@ class ProviderApiService
         // Increase memory limit for handling large image payloads (Gemini)
         ini_set('memory_limit', '4096M');
 
+        Log::info("[ProviderApiService] Executing provider", ['type' => $provider->type, 'model_id' => $providerModelId]);
+
         return match ($provider->type) {
             'fal_ai' => $this->executeFalAi($providerModelId, $payload),
             'replicate' => $this->executeReplicate($providerModelId, $payload),
@@ -165,6 +167,8 @@ class ProviderApiService
         $startTime = microtime(true);
         
         // Fal.ai POST to /fal-ai/{endpoint_id}
+        Log::info("[ProviderApiService] Calling Fal.ai", ['url' => "https://fal.run/{$modelId}"]);
+
         $response = Http::withHeaders([
             'Authorization' => 'Key ' . $key,
             'Content-Type' => 'application/json',
@@ -176,6 +180,7 @@ class ProviderApiService
         }
 
         $result = $response->json();
+        Log::info("[ProviderApiService] Fal.ai Response", ['status' => $response->status(), 'keys' => array_keys($result)]);
         $duration = microtime(true) - $startTime;
 
         // More robust result extraction
@@ -380,6 +385,12 @@ class ProviderApiService
             $generationConfig['imageConfig'] = $imageConfig;
         }
 
+        Log::info("[ProviderApiService] Calling Google Gemini", [
+            'url' => $url,
+            'parts_count' => count($parts),
+            'generation_config' => $generationConfig
+        ]);
+
         $response = Http::withHeaders([
             'Content-Type' => 'application/json',
             'x-goog-api-key' => $key,
@@ -394,6 +405,10 @@ class ProviderApiService
         }
 
         $result = $response->json();
+        Log::info("[ProviderApiService] Google Gemini Response", [
+            'status' => $response->status(), 
+            'candidates_count' => count($result['candidates'] ?? [])
+        ]);
         $duration = microtime(true) - $startTime;
         
         // Extract Output

@@ -164,9 +164,13 @@ export default function LunaInfluencerShow({ auth }: { auth: any }) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('Submitting Luna Generation Request', data);
         post(route('apps.luna-influencer.generate'), {
             forceFormData: true,
             preserveScroll: true,
+            onError: (errors) => {
+                console.error('Luna Generation Failed', errors);
+            }
         });
     };
 
@@ -358,6 +362,7 @@ export default function LunaInfluencerShow({ auth }: { auth: any }) {
                                             className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                                             onChange={e => handleFileChange('clothing_reference_images', e.target.files)}
                                         />
+                                        <InputError message={errors.clothing_reference_images as string} className="mt-2" />
                                     </div>
                                 </div>
 
@@ -426,6 +431,26 @@ export default function LunaInfluencerShow({ auth }: { auth: any }) {
                                             </div>
                                             <div className="ml-3">
                                                 <p className="text-sm text-red-700">{flash.error}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {Object.keys(errors).length > 0 && (
+                                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r shadow-sm">
+                                        <div className="flex">
+                                            <div className="flex-shrink-0">
+                                                <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                                </svg>
+                                            </div>
+                                            <div className="ml-3">
+                                                <p className="text-sm text-red-700 font-medium">Lütfen formdaki hataları kontrol edin.</p>
+                                                <ul className="mt-1 text-xs text-red-600 list-disc list-inside">
+                                                    {Object.entries(errors).map(([key, value]) => (
+                                                        <li key={key}>{value as string}</li>
+                                                    ))}
+                                                </ul>
                                             </div>
                                         </div>
                                     </div>

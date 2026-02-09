@@ -64,7 +64,13 @@ class AppsController extends Controller
     public function generateLunaInfluencer(Request $request)
     {
         $startTime = microtime(true);
-        Log::info("[Performance] Luna Generation Request Started");
+        Log::info("[Performance] Luna Generation Request Started", [
+            'user_id' => $request->user()->id,
+            'input' => $request->except(['identity_reference_images', 'clothing_reference_images']),
+            'has_clothing_files' => $request->hasFile('clothing_reference_images'),
+            'clothing_files_count' => count($request->file('clothing_reference_images') ?? []),
+            'content_length' => $_SERVER['CONTENT_LENGTH'] ?? 'unknown'
+        ]);
 
         // Increase memory limit for this request to handle multiple image uploads and processing
         ini_set('memory_limit', '4096M');
@@ -79,12 +85,14 @@ class AppsController extends Controller
             'lens_type' => 'required|string',
             // 'identity_reference_images' validation removed as it is now hardcoded
             'clothing_reference_images' => 'nullable|array',
-            'clothing_reference_images.*' => 'image|max:10240',
+            'clothing_reference_images.*' => 'image|max:20480', // Increased to 20MB
             'location_description' => 'required|string',
             'activity_style' => 'required|string',
             'pose_style' => 'required|string',
             'gaze_direction' => 'required|string',
         ]);
+        
+        Log::info('[Luna] Validation passed.');
         
         $validationTime = microtime(true) - $startTime;
         Log::info("[Performance] Validation took: " . number_format($validationTime, 4) . "s");
@@ -199,7 +207,15 @@ class AppsController extends Controller
     public function generateAiInfluencer(Request $request)
     {
         $startTime = microtime(true);
-        Log::info("[Performance] AI Influencer Generation Request Started");
+        Log::info("[Performance] AI Influencer Generation Request Started", [
+            'user_id' => $request->user()->id,
+            'input' => $request->except(['identity_reference_images', 'clothing_reference_images']),
+            'has_identity_files' => $request->hasFile('identity_reference_images'),
+            'identity_files_count' => count($request->file('identity_reference_images') ?? []),
+            'has_clothing_files' => $request->hasFile('clothing_reference_images'),
+            'clothing_files_count' => count($request->file('clothing_reference_images') ?? []),
+            'content_length' => $_SERVER['CONTENT_LENGTH'] ?? 'unknown'
+        ]);
 
         // Increase memory limit for this request to handle multiple image uploads and processing
         ini_set('memory_limit', '4096M');
@@ -213,14 +229,16 @@ class AppsController extends Controller
             'image_resolution' => 'required|string|in:1K,2K,4K',
             'lens_type' => 'required|string',
             'identity_reference_images' => 'required|array|min:1',
-            'identity_reference_images.*' => 'image|max:10240', // 10MB max
+            'identity_reference_images.*' => 'image|max:20480', // 20MB max
             'clothing_reference_images' => 'nullable|array',
-            'clothing_reference_images.*' => 'image|max:10240',
+            'clothing_reference_images.*' => 'image|max:20480', // 20MB max
             'location_description' => 'required|string',
             'activity_style' => 'required|string',
             'pose_style' => 'required|string',
             'gaze_direction' => 'required|string',
         ]);
+        
+        Log::info('[AI Influencer] Validation passed.');
         
         $validationTime = microtime(true) - $startTime;
         Log::info("[Performance] Validation took: " . number_format($validationTime, 4) . "s");

@@ -25,8 +25,10 @@ class GenerationService
         $provider = $model->providers()->where('is_primary', true)->with(['schema', 'provider'])->first();
         
         if (!$provider) {
+             Log::error("[GenerationService] No active provider found", ['model_id' => $model->id, 'model_slug' => $model->slug]);
             throw new Exception("No active provider found for model: {$model->name}");
         }
+        Log::info("[GenerationService] Provider selected", ['provider' => $provider->provider->name, 'model_id' => $provider->provider_model_id]);
 
         // 2. Prepare Schema & Field Types for normalization
         $schema = $provider->schema;
@@ -119,6 +121,8 @@ class GenerationService
         } else {
             $mappedPayload = $inputData;
         }
+        
+        Log::info("[GenerationService] Payload prepared", ['mapped_keys' => array_keys($mappedPayload)]);
 
         // 5. Execute real API call
         try {
@@ -142,6 +146,8 @@ class GenerationService
             ]);
             throw $e;
         }
+        
+        Log::info("[GenerationService] API Execution successful");
 
         // 4. Calculate Costs
         $costData = $this->costCalculator->calculate($provider, $executionResult['metrics']);
