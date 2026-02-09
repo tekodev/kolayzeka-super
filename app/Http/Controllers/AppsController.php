@@ -662,71 +662,64 @@ Absolute realism and maximum fidelity to all reference images.";
 
     public function download(\App\Models\Generation $generation)
     {
-        Log::info('[AppsController] Download requested', ['generation_id' => $generation->id, 'user_id' => auth()->id()]);
+        Log::info('[AppsController] Download requested', ['generation_id' => $generation->id]);
 
-        // AUTHORIZATION: Ensure user owns the generation
         if ($generation->user_id !== auth()->id()) {
-            Log::warning('[AppsController] Download 403: Unauthorized');
             abort(403);
         }
 
-        $url = $generation->output_data['result'] ?? null;
-        Log::info('[AppsController] Download URL', ['url' => $url]);
+        // Get the raw result from DB
+        $result = $generation->output_data['result'] ?? null;
+        $isS3 = $generation->output_data['is_s3_path'] ?? false;
 
-        if (!$url) {
-            Log::warning('[AppsController] Download 404: No URL');
+        Log::info('[AppsController] Download Data', ['result' => $result, 'is_s3' => $isS3]);
+
+        if (!$result) {
             abort(404);
         }
 
-        // Handle S3 URLs
-        if (str_contains($url, 'amazonaws.com') || str_contains($url, 'digitaloceanspaces.com')) {
-            // Extract the relative path from the full URL
-            $path = parse_url($url, PHP_URL_PATH);
-            $path = ltrim($path, '/'); // Remove leading slash
-            
-            Log::info('[AppsController] Parsed Path', ['path' => $path]);
-            
-            // Try to match specific patterns or use raw path
-            $relativePath = $path;
-            
-            // Fix: If path starts with "uploads/", keep it.
-            // Our previous regex '/(generations\/.*)/' might have stripped 'uploads/' if it was present before 'generations/'
-            // resulting in a wrong path.
-            
-            Log::info('[AppsController] Checking S3 existence', ['relativePath' => $relativePath]);
-
-            if (!\Storage::disk('s3')->exists($relativePath)) {
-                Log::warning('[AppsController] Download 404: S3 file not found', ['bucket_check' => $relativePath]);
-                
-                // If we can't find it by path, maybe it is an external URL (Fal.ai sometimes returns their own URL)
-                if (str_contains($url, 'fal.media') || str_contains($url, 'replicate.delivery')) {
-                     return redirect()->away($url);
-                }
-                
-                // Allow fallback if "uploads/" prefix is the issue vs missing it
-                $altPath = str_replace('uploads/', '', $relativePath);
-                if (\Storage::disk('s3')->exists($altPath)) {
-                    Log::info('[AppsController] Found at alternative path', ['altPath' => $altPath]);
-                    $relativePath = $altPath;
-                } else {
-                    abort(404, 'File not found in storage');
-                }
-            }
-
-            // Generate a temporary signed URL with Content-Disposition: attachment
-            return redirect()->to(
-                \Storage::disk('s3')->temporaryUrl(
-                    $relativePath,
-                    now()->addMinutes(5),
-                    [
-                        'ResponseContentDisposition' => 'attachment; filename="generated-' . $generation->id . '.' . pathinfo($relativePath, PATHINFO_EXTENSION) . '"',
-                    ]
-                )
-            );
+        // Case 1: Explicitly marked as S3 path or looks like a relative path (no http prefix)
+        if ($isS3 || !preg_match('/^https?:\/\//', $result)) {
+             $relativePath = $result;
+             
+             // Ensure it exists
+             if (\Storage::disk('s3')->exists($relativePath)) {
+                 return redirect()->to(
+                    \Storage::disk('s3')->temporaryUrl(
+                        $relativePath,
+                        now()->addMinutes(10),
+                        [
+                            'ResponseContentDisposition' => 'attachment; filename="generated-' . $generation->id . '.' . pathinfo($relativePath, PATHINFO_EXTENSION) . '"',
+                        ]
+                    )
+                );
+             } else {
+                 Log::error('[AppsController] Detailed S3 path not found', ['path' => $relativePath]);
+                 abort(404, 'File missing from storage');
+             }
         }
 
-        // If it's an external URL (e.g. from Fal.ai directly if not uploaded to S3 yet)
-        return redirect()->away($url);
+        // Case 2: Full URL (S3 or External)
+        if (str_contains($result, 'amazonaws.com') || str_contains($result, 'digitaloceanspaces.com')) {
+             // Try to parse relative path if it's a full S3 URL
+             $path = ltrim(parse_url($result, PHP_URL_PATH), '/');
+             // Attempt to match generations/...
+             if (\Storage::disk('s3')->exists($path)) {
+                  // Serve as attachment
+                  return redirect()->to(
+                    \Storage::disk('s3')->temporaryUrl(
+                        $path,
+                        now()->addMinutes(10),
+                        [
+                            'ResponseContentDisposition' => 'attachment; filename="generated-' . $generation->id . '.' . pathinfo($path, PATHINFO_EXTENSION) . '"',
+                        ]
+                    )
+                );
+             }
+        }
+
+        // Case 3: External URL (Fal.ai, Replicate, etc.)
+        return redirect()->away($result);
     }
 
 }
