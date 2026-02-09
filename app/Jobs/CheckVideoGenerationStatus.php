@@ -70,18 +70,20 @@ class CheckVideoGenerationStatus implements ShouldQueue
                         Log::info("[CheckVideoGenerationStatus] Downloading video from Google URL...");
                         $videoContent = $veoService->downloadVideo($videoUrl);
                         
-                        $filename = "videos/" . $this->generation->user_id . "/" . $this->generation->id . ".mp4";
+                        $filename = "uploads/generations/videos/" . $this->generation->user_id . "/" . $this->generation->id . ".mp4";
                         Log::info("[CheckVideoGenerationStatus] Saving video to storage: {$filename}");
                         
                         // Use S3 disk explicitly (without ACL)
                         \Illuminate\Support\Facades\Storage::disk('s3')->put($filename, $videoContent);
-                        $storedUrl = \Illuminate\Support\Facades\Storage::disk('s3')->url($filename);
                         
-                        Log::info("[CheckVideoGenerationStatus] Video saved successfully to S3. URL: {$storedUrl}");
+                        // Store PATH, not URL (so we can sign it dynamically every time)
+                        $storedPath = $filename;
+                        
+                        Log::info("[CheckVideoGenerationStatus] Video saved successfully to S3. Path: {$storedPath}");
 
                         $this->generation->update([
                             'status' => 'completed',
-                            'output_data' => ['result' => $storedUrl], // Store permanent URL
+                            'output_data' => ['result' => $storedPath, 'is_s3_path' => true], // Store path and flag
                             'profit_usd' => 0, // Calculate cost if needed
                         ]);
                     } catch (\Exception $e) {
@@ -98,7 +100,23 @@ class CheckVideoGenerationStatus implements ShouldQueue
                     
                     if (isset($status['response']['generateVideoResponse']['raiMediaFilteredReasons'])) {
                         $reasons = $status['response']['generateVideoResponse']['raiMediaFilteredReasons'];
-                        $errorMessage = 'Video generation blocked by safety filters: ' . implode(', ', $reasons);
+                        // User friendly message
+                        $errorMessage = 'İçerik politikalarına takıldı: ' . implode(', ', $reasons) . '. Lütfen promptu değiştirip tekrar deneyin. Krediniz iade edildi.';
+                    }
+
+                    // Refund credits
+                    if ($this->generation->user_credit_cost > 0) {
+                        try {
+                            app(\App\Services\CreditService::class)->deposit(
+                                $this->generation->user,
+                                $this->generation->user_credit_cost,
+                                'refund',
+                                ['reason' => 'generation_failed', 'generation_id' => $this->generation->id]
+                            );
+                            Log::info("[CheckVideoGenerationStatus] Refunded {$this->generation->user_credit_cost} credits to user {$this->generation->user_id}");
+                        } catch (\Exception $e) {
+                            Log::error("[CheckVideoGenerationStatus] Refund failed: " . $e->getMessage());
+                        }
                     }
 
                     $this->generation->update([

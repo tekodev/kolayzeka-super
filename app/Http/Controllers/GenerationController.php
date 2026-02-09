@@ -18,6 +18,10 @@ class GenerationController extends Controller
             ->with(['aiModel'])
             ->orderBy('id', 'desc')
             ->paginate(12);
+            
+        $generations->getCollection()->transform(function ($generation) {
+            return $generation->prepareVideoUrl();
+        });
 
         return Inertia::render('Generations/Index', [
             'generations' => $generations

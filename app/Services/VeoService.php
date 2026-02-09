@@ -56,7 +56,7 @@ class VeoService
             $response = Http::withHeaders([
                 'x-goog-api-key' => $this->apiKey,
                 'Content-Type' => 'application/json',
-            ])->post("{$this->baseUrl}/models/veo-3.1-generate-preview:predictLongRunning", $payload);
+            ])->post("{$this->baseUrl}/models/veo-3.1-fast-generate-preview:predictLongRunning", $payload);
 
             if (!$response->successful()) {
                 Log::error('[VeoService] API request failed', [

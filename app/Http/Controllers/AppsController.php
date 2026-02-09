@@ -52,6 +52,7 @@ class AppsController extends Controller
             
             if ($latestId) {
                 $latestGeneration = \App\Models\Generation::find($latestId);
+                if ($latestGeneration) $latestGeneration->prepareVideoUrl();
             }
         }
 
@@ -186,6 +187,7 @@ class AppsController extends Controller
 
             if ($latestId) {
                 $latestGeneration = \App\Models\Generation::find($latestId);
+                if ($latestGeneration) $latestGeneration->prepareVideoUrl();
             }
         }
 
@@ -637,6 +639,7 @@ Absolute realism and maximum fidelity to all reference images.";
                 'trace' => $e->getTraceAsString()
             ]);
             return back()->withErrors(['error' => 'Video generation failed: ' . $e->getMessage()]);
-        }
     }
+    }
+
 }
