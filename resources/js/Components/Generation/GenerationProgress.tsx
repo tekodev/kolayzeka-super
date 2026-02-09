@@ -40,10 +40,10 @@ export default function GenerationProgress({ processing, progressPercentage = 0 
     useEffect(() => {
         if (progressPercentage > 0 && progressPercentage < 100) return; // Keep upload text
         
-        if (visualProgress < 10) setStatusText('INITIALIZING REQUEST...');
-        else if (visualProgress < 40) setStatusText('AI IS GENERATING...');
-        else if (visualProgress < 75) setStatusText('ENHANCING DETAILS...');
-        else setStatusText('FINALIZING MAGIC...');
+        if (visualProgress < 10) setStatusText('İSTEK BAŞLATILIYOR...');
+        else if (visualProgress < 40) setStatusText('YAPAY ZEKA OLUŞTURUYOR...');
+        else if (visualProgress < 75) setStatusText('DETAYLAR İYİLEŞTİRİLİYOR...');
+        else setStatusText('SON DOKUNUŞLAR YAPILIYOR...');
     }, [visualProgress, progressPercentage]);
 
     if (!processing) return null;
