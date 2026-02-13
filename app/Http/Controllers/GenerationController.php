@@ -14,13 +14,42 @@ class GenerationController extends Controller
 
     public function index(Request $request)
     {
+        // Select only necessary columns to reduce memory usage and JSON size
         $generations = \App\Models\Generation::where('user_id', $request->user()->id)
-            ->with(['aiModel'])
+            ->select([
+                'id', 
+                'user_id', 
+                'ai_model_id', 
+                'status', 
+                'created_at', 
+                'output_data', 
+                'user_credit_cost', 
+                'error_message'
+            ])
+            ->with(['aiModel:id,name,image_url']) // Optimize eager loading
             ->orderBy('id', 'desc')
             ->paginate(12);
-            
+
+        // Transform collection to clean up data
         $generations->getCollection()->transform(function ($generation) {
-            return $generation->prepareVideoUrl();
+            // Prepare the signed URL
+            $generation->prepareVideoUrl();
+            
+            // Clean output_data to remove heavy raw responses
+            if ($generation->output_data) {
+                $cleanOutput = [
+                    'result' => $generation->output_data['result'] ?? null,
+                    'thumbnail' => $generation->output_data['thumbnail'] ?? null,
+                    'is_s3_path' => $generation->output_data['is_s3_path'] ?? false,
+                ];
+                $generation->output_data = $cleanOutput;
+            }
+
+            // Remove input_data entirely as it's not used in the list view
+            // (Note: We already didn't select it, but good to be explicit if model appended it)
+            unset($generation->input_data);
+            
+            return $generation;
         });
 
         return Inertia::render('Generations/Index', [

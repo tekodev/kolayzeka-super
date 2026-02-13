@@ -63,8 +63,7 @@ class AppsController extends Controller
 
     public function generateLunaInfluencer(Request $request)
     {
-        $startTime = microtime(true);
-        // Log::info("[Performance] Luna Generation Request Started");
+
 
         // Increase memory limit for this request to handle multiple image uploads and processing
         ini_set('memory_limit', '4096M');
@@ -85,8 +84,8 @@ class AppsController extends Controller
             'pose_style' => 'required|string',
             'gaze_direction' => 'required|string',
         ]);
-        
-        // Log::info("[Performance] Validation took: " . number_format($validationTime, 4) . "s");
+
+
 
         $model = AiModel::where('slug', 'nano-banana-pro')->firstOrFail();
 
@@ -116,14 +115,12 @@ class AppsController extends Controller
              return redirect()->back()->with('error', 'System Error: Failed to retrieve Google File URIs.');
         }
         
-        $fileManagerTime = microtime(true) - $startTime - $validationTime;
-        Log::info("[Performance] GoogleFileManager (URI Retrieval) took: " . number_format($fileManagerTime, 4) . "s");
+
 
         // Construct Prompt (Pass empty identity list because we handle it manually in prompt logic below)
         $prompt = $this->constructLunaPrompt($request->all(), true); 
         
-        $promptTime = microtime(true) - $startTime - $validationTime - $fileManagerTime;
-        Log::info("[Performance] Prompt Construction took: " . number_format($promptTime, 4) . "s");
+
 
         // Prepare Input Data for GenerationService
         // We inject the File URI structure for BOTH images
@@ -144,25 +141,13 @@ class AppsController extends Controller
         // Merge other fields
         $inputData = array_merge($request->except(['identity_reference_images', 'clothing_reference_images']), $inputData);
 
-        Log::info('Luna Generation Started (2 Static Images)', [
-            'user_id' => $request->user()->id,
-            'aspect_ratio' => $request->aspect_ratio,
-            'resolution' => $request->image_resolution,
-            'framing' => $request->framing_type,
-            'clothing_images_count' => count($request->file('clothing_reference_images') ?? []),
-        ]);
+
         
         // Ensure output_format is set if needed
         $inputData['output_format'] = 'jpeg';
 
         try {
-            $serviceStart = microtime(true);
             $generation = $this->generationService->generate($request->user(), $model, $inputData);
-            $serviceDuration = microtime(true) - $serviceStart;
-            Log::info("[Performance] GenerationService::generate took: " . number_format($serviceDuration, 4) . "s");
-            
-            $totalDuration = microtime(true) - $startTime;
-            Log::info("[Performance] Total Request Duration: " . number_format($totalDuration, 4) . "s");
 
             return redirect()->back()->with('generation_result', $generation);
         } catch (\Exception $e) {
@@ -197,17 +182,6 @@ class AppsController extends Controller
 
     public function generateAiInfluencer(Request $request)
     {
-        $startTime = microtime(true);
-        Log::info("[Performance] AI Influencer Generation Request Started", [
-            'user_id' => $request->user()->id,
-            'input' => $request->except(['identity_reference_images', 'clothing_reference_images']),
-            'has_identity_files' => $request->hasFile('identity_reference_images'),
-            'identity_files_count' => count($request->file('identity_reference_images') ?? []),
-            'has_clothing_files' => $request->hasFile('clothing_reference_images'),
-            'clothing_files_count' => count($request->file('clothing_reference_images') ?? []),
-            'content_length' => $_SERVER['CONTENT_LENGTH'] ?? 'unknown'
-        ]);
-
         // Increase memory limit for this request to handle multiple image uploads and processing
         ini_set('memory_limit', '4096M');
         set_time_limit(300);
@@ -229,18 +203,14 @@ class AppsController extends Controller
             'gaze_direction' => 'required|string',
         ]);
         
-        Log::info('[AI Influencer] Validation passed.');
-        
-        $validationTime = microtime(true) - $startTime;
-        Log::info("[Performance] Validation took: " . number_format($validationTime, 4) . "s");
+
 
         $model = AiModel::where('slug', 'nano-banana-pro')->firstOrFail();
 
         // Construct Prompt (Dynamic Identity)
         $prompt = $this->constructLunaPrompt($request->all(), false);
         
-        $promptTime = microtime(true) - $startTime - $validationTime;
-        Log::info("[Performance] Prompt Construction took: " . number_format($promptTime, 4) . "s");
+
 
         // Prepare Input Data for GenerationService
         // Standard flow: Upload files to S3 via GenerationService
@@ -252,27 +222,13 @@ class AppsController extends Controller
         // Merge other fields
         $inputData = array_merge($request->except(['identity_reference_images', 'clothing_reference_images']), $inputData);
 
-        Log::info('AI Influencer Generation Started', [
-            'user_id' => $request->user()->id,
-            'aspect_ratio' => $request->aspect_ratio,
-            'resolution' => $request->image_resolution,
-            'framing' => $request->framing_type,
-            'identity_images_count' => count($request->file('identity_reference_images') ?? []),
-            'clothing_images_count' => count($request->file('clothing_reference_images') ?? []),
-            // 'constructed_prompt' => $prompt
-        ]);
+
         
         $inputData['output_format'] = 'jpeg';
 
         try {
-            $serviceStart = microtime(true);
             $generation = $this->generationService->generate($request->user(), $model, $inputData);
-            $serviceDuration = microtime(true) - $serviceStart;
-            Log::info("[Performance] GenerationService::generate took: " . number_format($serviceDuration, 4) . "s");
-            
-            $totalDuration = microtime(true) - $startTime;
-            Log::info("[Performance] Total Request Duration: " . number_format($totalDuration, 4) . "s");
-            
+
             return redirect()->back()->with('generation_result', $generation);
         } catch (\Exception $e) {
             Log::error('AI Influencer Generation Failed: ' . $e->getMessage());
