@@ -13,17 +13,8 @@ interface VideoGenerationFormProps {
 export default function VideoGenerationForm({ generationId, routeName, originalPrompt }: VideoGenerationFormProps) {
     const { data, setData, post, processing, errors } = useForm({
         generation_id: generationId,
-        video_prompt: `A cinematic, photorealistic fashion presentation video.
-A person wearing an elegant dress stands naturally in place with relaxed, balanced posture.
-The subject remains mostly stationary, maintaining correct human anatomy and realistic proportions at all times.
-They make a slow, subtle shift of weight and a very gentle partial turn to present the garment from multiple angles.
-The movement is minimal, smooth, and controlled, with no rapid motion.
-The dress fabric moves softly and naturally due to gravity and slight body motion, showing realistic texture and flow.
-The subject faces the camera direction with a calm, confident expression.
-Professional fashion lighting, realistic fabric detail, cinematic depth of field, high visual fidelity.
-`,
+        video_prompt: `Raw footage, UGC style. The woman in  Image is standing in front of a fixed camera on a tripod in her bedroom. She is silent, not talking, and smiling gently at the camera. She turns her body slowly left and right to show the fit of her dress. Static camera, locked tripod shot, NO camera movement, NO handheld shake. Fixed eye-level angle. Real-time speed, normal motion, no slow motion. Authentic amateur video vibe.`,
         camera_movement: 'static',
-        action: 'Slow partial turn, subtle weight shift, minimal motion, natural human movement, gentle fabric flow',
         duration: '8',
     });
 
@@ -101,21 +92,6 @@ Professional fashion lighting, realistic fabric detail, cinematic depth of field
                         <InputError message={errors.camera_movement} className="mt-2" />
                     </div>
 
-                    {/* Action */}
-                    <div>
-                        <InputLabel value="Aksiyon" />
-                        <input
-                            type="text"
-                            className="mt-1 block w-full border-gray-300 focus:border-purple-500 focus:ring-purple-500 rounded-md shadow-sm"
-                            value={data.action}
-                            onChange={e => setData('action', e.target.value)}
-                            placeholder="e.g., gentle twirl, walking, posing"
-                        />
-                        <InputError message={errors.action} className="mt-2" />
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Duration */}
                     <div>
                         <InputLabel value="Süre" />
@@ -131,6 +107,8 @@ Professional fashion lighting, realistic fabric detail, cinematic depth of field
                         <InputError message={errors.duration} className="mt-2" />
                     </div>
                 </div>
+
+
 
                 {/* Info Box */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

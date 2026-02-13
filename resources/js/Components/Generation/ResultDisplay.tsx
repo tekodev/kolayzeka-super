@@ -18,14 +18,9 @@ export default function ResultDisplay({ generation, error, onCreateVideo }: Resu
     };
 
     const handleDownload = () => {
-        console.log('Download Debug:', generation);
-        if (!generation.id) {
-            console.error('Download aborted: No ID found in generation object');
-            return;
-        }
+        if (!generation.id) return;
         // Manual URL construction to avoid potential Ziggy issues
         const url = `/apps/download/${generation.id}`;
-        console.log('Navigating to:', url);
         window.location.href = url;
     };
 

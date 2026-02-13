@@ -64,13 +64,7 @@ class AppsController extends Controller
     public function generateLunaInfluencer(Request $request)
     {
         $startTime = microtime(true);
-        Log::info("[Performance] Luna Generation Request Started", [
-            'user_id' => $request->user()->id,
-            'input' => $request->except(['identity_reference_images', 'clothing_reference_images']),
-            'has_clothing_files' => $request->hasFile('clothing_reference_images'),
-            'clothing_files_count' => count($request->file('clothing_reference_images') ?? []),
-            'content_length' => $_SERVER['CONTENT_LENGTH'] ?? 'unknown'
-        ]);
+        // Log::info("[Performance] Luna Generation Request Started");
 
         // Increase memory limit for this request to handle multiple image uploads and processing
         ini_set('memory_limit', '4096M');
@@ -92,10 +86,7 @@ class AppsController extends Controller
             'gaze_direction' => 'required|string',
         ]);
         
-        Log::info('[Luna] Validation passed.');
-        
-        $validationTime = microtime(true) - $startTime;
-        Log::info("[Performance] Validation took: " . number_format($validationTime, 4) . "s");
+        // Log::info("[Performance] Validation took: " . number_format($validationTime, 4) . "s");
 
         $model = AiModel::where('slug', 'nano-banana-pro')->firstOrFail();
 
@@ -419,7 +410,6 @@ Absolute realism and maximum fidelity to all reference images.";
             'generation_id' => 'required|exists:generations,id',
             'video_prompt' => 'required|string|max:2000',
             'camera_movement' => 'nullable|string',
-            'action' => 'nullable|string',
             'duration' => 'nullable|in:4,6,8',
             'resolution' => 'nullable|in:720p,1080p,4k',
             'negative_prompt' => 'nullable|string',
@@ -513,7 +503,6 @@ Absolute realism and maximum fidelity to all reference images.";
                     'input_data' => [
                         'video_prompt' => $validated['video_prompt'],
                         'camera_movement' => $validated['camera_movement'] ?? null,
-                        'action' => $validated['action'] ?? null,
                         'operation_name' => $operation['name'] ?? null,
                     ],
                 ]);
@@ -545,7 +534,6 @@ Absolute realism and maximum fidelity to all reference images.";
             'generation_id' => 'required|exists:generations,id',
             'video_prompt' => 'required|string|max:2000',
             'camera_movement' => 'nullable|string',
-            'action' => 'nullable|string',
             'duration' => 'nullable|in:4,6,8',
             'resolution' => 'nullable|in:720p,1080p,4k',
             'negative_prompt' => 'nullable|string',
@@ -639,7 +627,6 @@ Absolute realism and maximum fidelity to all reference images.";
                     'input_data' => [
                         'video_prompt' => $validated['video_prompt'],
                         'camera_movement' => $validated['camera_movement'] ?? null,
-                        'action' => $validated['action'] ?? null,
                         'operation_name' => $operation['name'] ?? null,
                     ],
                 ]);
@@ -662,8 +649,6 @@ Absolute realism and maximum fidelity to all reference images.";
 
     public function download(\App\Models\Generation $generation)
     {
-        Log::info('[AppsController] Download requested', ['generation_id' => $generation->id]);
-
         if ($generation->user_id !== auth()->id()) {
             abort(403);
         }
@@ -671,8 +656,6 @@ Absolute realism and maximum fidelity to all reference images.";
         // Get the raw result from DB
         $result = $generation->output_data['result'] ?? null;
         $isS3 = $generation->output_data['is_s3_path'] ?? false;
-
-        Log::info('[AppsController] Download Data', ['result' => $result, 'is_s3' => $isS3]);
 
         if (!$result) {
             abort(404);
@@ -694,7 +677,6 @@ Absolute realism and maximum fidelity to all reference images.";
                     )
                 );
              } else {
-                 Log::error('[AppsController] Detailed S3 path not found', ['path' => $relativePath]);
                  abort(404, 'File missing from storage');
              }
         }
