@@ -27,7 +27,7 @@ export default function GenerationsIndex({ auth, generations }: Props) {
     return (
         <AuthenticatedLayout
             header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
+                <h2 className="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
                     My History
                 </h2>
             }
@@ -38,9 +38,9 @@ export default function GenerationsIndex({ auth, generations }: Props) {
                 <div className="mx-auto max-w-7xl sm:px-6 lg:px-8">
                     
                     {generations.data.length === 0 ? (
-                         <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg p-12 text-center">
-                            <h3 className="text-lg font-medium text-gray-900">No generations yet</h3>
-                            <p className="mt-2 text-gray-500">Create your first AI masterpiece today!</p>
+                         <div className="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg p-12 text-center">
+                            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No generations yet</h3>
+                            <p className="mt-2 text-gray-500 dark:text-gray-400">Create your first AI masterpiece today!</p>
                             <Link 
                                 href={route('dashboard')} 
                                 className="mt-6 inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 transition"
@@ -65,7 +65,7 @@ export default function GenerationsIndex({ auth, generations }: Props) {
                                         <Link
                                             key={key}
                                             href={link.url}
-                                            className={`px-3 py-1 text-sm rounded ${link.active ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                            className={`px-3 py-1 text-sm rounded ${link.active ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                                             dangerouslySetInnerHTML={{ __html: link.label }}
                                         />
                                     ) : (

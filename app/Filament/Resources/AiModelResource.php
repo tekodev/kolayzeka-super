@@ -17,7 +17,7 @@ class AiModelResource extends Resource
 {
     protected static ?string $model = AiModel::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-cpu-chip';
 
     public static function form(Form $form): Form
     {
@@ -31,7 +31,12 @@ class AiModelResource extends Resource
                 Forms\Components\TextInput::make('slug')
                     ->required()
                     ->maxLength(255),
-                Forms\Components\TextInput::make('category'),
+                Forms\Components\Select::make('categories')
+                    ->relationship('categories', 'name')
+                    ->multiple()
+                    ->required()
+                    ->searchable()
+                    ->preload(),
                 Forms\Components\Textarea::make('description'),
                 Forms\Components\FileUpload::make('image_url')
                     ->image()
@@ -47,7 +52,11 @@ class AiModelResource extends Resource
             ->columns([
                 Tables\Columns\ImageColumn::make('image_url'),
                 Tables\Columns\TextColumn::make('name')->searchable(),
-                Tables\Columns\TextColumn::make('category')->searchable(),
+                Tables\Columns\TextColumn::make('categories.name')
+                    ->label('Categories')
+                    ->badge()
+                    ->separator(',')
+                    ->searchable(),
                 Tables\Columns\IconColumn::make('is_active')->boolean(),
                 Tables\Columns\TextColumn::make('created_at')->dateTime(),
             ])

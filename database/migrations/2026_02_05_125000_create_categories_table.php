@@ -11,9 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->decimal('credit_balance', 12, 2)->default(0);
-            $table->decimal('total_profit_usd', 12, 6)->default(0);
+        Schema::create('categories', function (Blueprint $table) {
+            $table->id();
+            $table->string('name')->unique();
+            $table->string('input_type')->nullable();
+            $table->string('output_type')->nullable();
+            $table->timestamps();
         });
     }
 
@@ -22,8 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['credit_balance', 'total_profit_usd']);
-        });
+        Schema::dropIfExists('categories');
     }
 };

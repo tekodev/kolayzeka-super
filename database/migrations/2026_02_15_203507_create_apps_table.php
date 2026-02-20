@@ -11,13 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('providers', function (Blueprint $table) {
+        Schema::create('apps', function (Blueprint $table) {
             $table->id();
             $table->string('name');
             $table->string('slug')->unique();
-            $table->string('logo_url')->nullable();
             $table->text('description')->nullable();
-            $table->boolean('active')->default(true);
+            $table->string('icon')->nullable()->default('heroicon-o-cube');
+            $table->decimal('cost_multiplier', 5, 2)->default(1.00);
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }
@@ -27,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('providers');
+        Schema::dropIfExists('apps');
     }
 };

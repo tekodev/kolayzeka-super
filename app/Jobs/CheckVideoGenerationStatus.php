@@ -10,6 +10,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use App\Events\GenerationCompleted;
 
 class CheckVideoGenerationStatus implements ShouldQueue
 {
@@ -42,68 +43,49 @@ class CheckVideoGenerationStatus implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(VeoService $veoService): void
+    /**
+     * Execute the job.
+     */
+    public function handle(): void
     {
-        $operationName = $this->generation->input_data['operation_name'] ?? null;
+        // 1. Retrieve operation name
+        $outputData = $this->generation->output_data;
+        $operationName = $outputData['operation_name'] ?? $this->generation->input_data['operation_name'] ?? null;
+        
         Log::info("[CheckVideoGenerationStatus] Job started", ['generation_id' => $this->generation->id, 'operation' => $operationName]);
 
         if (!$operationName) {
             Log::error("[CheckVideoGenerationStatus] Generation {$this->generation->id} has no operation_name");
             $this->generation->update(['status' => 'failed', 'error_message' => 'Missing operation name']);
+            broadcast(new GenerationCompleted($this->generation, $this->generation->user_id))->toOthers();
             return;
         }
 
         try {
-            Log::info("[CheckVideoGenerationStatus] Checking status for generation {$this->generation->id}...");
-            $status = $veoService->checkOperationStatus($operationName);
-            Log::info("[CheckVideoGenerationStatus] Status received", ['status_data' => $status]);
+            // 2. Resolve Provider Dynamically
+            $providerType = $this->generation->aiModel?->aiModelProviders?->first()?->provider?->type ?? 'google'; 
+            
+            if (!$this->generation->aiModel) {
+                Log::warning("[CheckVideoGenerationStatus] aiModel relationship is null for Generation {$this->generation->id}");
+            }
+            
+            /** @var \App\Services\AiProviders\AsyncAiProviderInterface $providerService */
+            $providerService = app(\App\Services\AiProviders\AiProviderFactory::class)->make($providerType);
 
-            if ($status['done'] ?? false) {
-                // Operation completed
-                Log::info("[CheckVideoGenerationStatus] Generation {$this->generation->id} completed");
-                
-                $videoUrl = $status['response']['generateVideoResponse']['generatedSamples'][0]['video']['uri'] ?? null;
-                Log::info("[CheckVideoGenerationStatus] Video URL extracted: " . ($videoUrl ?? 'NULL'));
+            if (!($providerService instanceof \App\Services\AiProviders\AsyncAiProviderInterface)) {
+                throw new \Exception("Provider {$providerType} does not support async operations.");
+            }
 
-                if ($videoUrl) {
-                    try {
-                        Log::info("[CheckVideoGenerationStatus] Downloading video from Google URL...");
-                        $videoContent = $veoService->downloadVideo($videoUrl);
-                        
-                        $filename = "uploads/generations/videos/" . $this->generation->user_id . "/" . $this->generation->id . ".mp4";
-                        Log::info("[CheckVideoGenerationStatus] Saving video to storage: {$filename}");
-                        
-                        // Use S3 disk explicitly (without ACL)
-                        \Illuminate\Support\Facades\Storage::disk('s3')->put($filename, $videoContent);
-                        
-                        // Store PATH, not URL (so we can sign it dynamically every time)
-                        $storedPath = $filename;
-                        
-                        Log::info("[CheckVideoGenerationStatus] Video saved successfully to S3. Path: {$storedPath}");
+            // 3. Check Status
+            Log::info("[CheckVideoGenerationStatus] Checking status via {$providerType}...");
+            $status = $providerService->checkOperationStatus($operationName);
+            Log::info("[CheckVideoGenerationStatus] Status received", ['status_summary' => $status]);
 
-                        $this->generation->update([
-                            'status' => 'completed',
-                            'output_data' => ['result' => $storedPath, 'is_s3_path' => true], // Store path and flag
-                            'profit_usd' => 0, // Calculate cost if needed
-                        ]);
-                    } catch (\Exception $e) {
-                         Log::error("[CheckVideoGenerationStatus] Failed to download/save video: " . $e->getMessage());
-                         $this->generation->update([
-                            'status' => 'failed',
-                            'error_message' => 'Video generated but failed to save: ' . $e->getMessage(),
-                            'output_data' => array_merge($status, ['google_url' => $videoUrl]) // Keep original URL as backup
-                        ]);
-                    }
-                } else {
-                    // Check for safety filters or other errors
-                    $errorMessage = 'No video URL in response';
+            if ($status['done']) {
+                if ($status['error']) {
+                    // Failed
+                    $errorMessage = $status['error'];
                     
-                    if (isset($status['response']['generateVideoResponse']['raiMediaFilteredReasons'])) {
-                        $reasons = $status['response']['generateVideoResponse']['raiMediaFilteredReasons'];
-                        // User friendly message
-                        $errorMessage = 'İçerik politikalarına takıldı: ' . implode(', ', $reasons) . '. Lütfen promptu değiştirip tekrar deneyin. Krediniz iade edildi.';
-                    }
-
                     // Refund credits
                     if ($this->generation->user_credit_cost > 0) {
                         try {
@@ -113,7 +95,7 @@ class CheckVideoGenerationStatus implements ShouldQueue
                                 'refund',
                                 ['reason' => 'generation_failed', 'generation_id' => $this->generation->id]
                             );
-                            Log::info("[CheckVideoGenerationStatus] Refunded {$this->generation->user_credit_cost} credits to user {$this->generation->user_id}");
+                            Log::info("[CheckVideoGenerationStatus] Refunded credits");
                         } catch (\Exception $e) {
                             Log::error("[CheckVideoGenerationStatus] Refund failed: " . $e->getMessage());
                         }
@@ -122,21 +104,63 @@ class CheckVideoGenerationStatus implements ShouldQueue
                     $this->generation->update([
                         'status' => 'failed',
                         'error_message' => $errorMessage,
-                        'output_data' => $status
+                        'output_data' => array_merge($this->generation->output_data ?? [], ['raw_status' => $status['raw'] ?? []])
                     ]);
+
+                    broadcast(new GenerationCompleted($this->generation, $this->generation->user_id))->toOthers();
+
+                } elseif ($status['result_url']) {
+                    // Success
+                    try {
+                        Log::info("[CheckVideoGenerationStatus] Downloading result...");
+                        $content = $providerService->downloadResult($status['result_url']);
+                        
+                        // Determine extension ? usually mp4 for video. 
+                        // We can improve this by getting extension from mime/url or just assume mp4 for now.
+                        $filename = "uploads/generations/videos/" . $this->generation->user_id . "/" . $this->generation->id . ".mp4";
+                        
+                        Log::info("[CheckVideoGenerationStatus] Saving to storage: {$filename}");
+                        \Illuminate\Support\Facades\Storage::disk('s3')->put($filename, $content);
+                        
+                        // Final Update
+                        $finalOutputData = $this->generation->output_data ?? [];
+                        $finalOutputData['result'] = $filename; // Store relative path for prepareVideoUrl() compatibility
+                        $finalOutputData['is_s3_path'] = true;
+                        $finalOutputData['raw_status'] = $status['raw'] ?? [];
+
+                        $this->generation->update([
+                            'status' => 'completed',
+                            'output_data' => $finalOutputData,
+                            'profit_usd' => 0, 
+                        ]);
+
+                        // Prepare the signed URL for immediate broadcast
+                        $this->generation->prepareVideoUrl();
+                        $signedUrl = $this->generation->output_data['result'] ?? null;
+
+                        broadcast(new GenerationCompleted($this->generation, $this->generation->user_id, $signedUrl));
+                        Log::info("[CheckVideoGenerationStatus] Broadcasted completion event with signed URL", ['url' => $signedUrl]);
+
+                    } catch (\Exception $e) {
+                        Log::error("[CheckVideoGenerationStatus] Download/Save check failed: " . $e->getMessage());
+                        $this->generation->update([
+                            'status' => 'failed',
+                            'error_message' => 'Video generated but failed to save: ' . $e->getMessage(),
+                        ]);
+                        broadcast(new GenerationCompleted($this->generation, $this->generation->user_id))->toOthers();
+                    }
                 }
             } else {
-                // Still processing, release back to queue
-                Log::info("[CheckVideoGenerationStatus] Generation {$this->generation->id} still processing. Releasing...");
-                $this->release(10); // Check again in 10 seconds
+                // Still processing
+                Log::info("[CheckVideoGenerationStatus] Operation processing. Releasing...");
+                $this->release(10);
             }
 
         } catch (\Exception $e) {
-            Log::error("[CheckVideoGenerationStatus] Error checking status: " . $e->getMessage());
-            // Don't fail immediately, maybe retry a few times?
-            // For now, let Laravel's standard retry mechanism handle it or fail
+            Log::error("[CheckVideoGenerationStatus] Error: " . $e->getMessage());
             if ($this->attempts() > 5) {
                 $this->generation->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
+                broadcast(new GenerationCompleted($this->generation, $this->generation->user_id))->toOthers();
             } else {
                 $this->release(30);
             }

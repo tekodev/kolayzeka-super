@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\AiModel;
 use App\Services\GenerationService;
+use App\Jobs\ProcessGenerationJob;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 use Inertia\Inertia;
 
@@ -26,7 +29,9 @@ class GenerationController extends Controller
                 'user_credit_cost', 
                 'error_message'
             ])
-            ->with(['aiModel:id,name,image_url']) // Optimize eager loading
+            ->with(['aiModel' => function($q) {
+                $q->select(['id', 'name', 'image_url'])->with('categories');
+            }]) 
             ->orderBy('id', 'desc')
             ->paginate(12);
 
@@ -59,27 +64,64 @@ class GenerationController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'ai_model_id' => 'required|exists:ai_models,id',
             'input_data' => 'required|array',
         ]);
-
-        $model = AiModel::findOrFail($request->ai_model_id);
         
+        // Handle file uploads in input_data explicitly
+        $inputData = $validated['input_data'];
+        foreach ($inputData as $key => $value) {
+            if ($value instanceof \Illuminate\Http\UploadedFile) {
+                try {
+                     $path = $value->store('generations/inputs', 's3');
+                     $url = Storage::disk('s3')->url($path);
+                     $inputData[$key] = $url;
+                } catch (\Exception $e) {
+                     Log::error("[GenerationController] Failed to upload file for key {$key}: " . $e->getMessage());
+                }
+            }
+        }
+        $validated['input_data'] = $inputData;
+
+        $model = AiModel::with('primaryProvider')->findOrFail($request->ai_model_id);
+        
+        if (!$model->primaryProvider) {
+            return back()->withErrors(['error' => 'Model provider configuration not found']);
+        }
+
         try {
-            $generation = $this->generationService->generate(
-                $request->user(),
-                $model,
-                $request->input_data
+            // Create generation record with pending status
+            $generation = \App\Models\Generation::create([
+                'user_id' => $request->user()->id,
+                'ai_model_id' => $model->id,
+                'ai_model_provider_id' => $model->primaryProvider->id,
+                'status' => 'pending',
+                'input_data' => $validated['input_data'], // Use validated data to include files
+                'output_data' => null,
+                'provider_request_body' => null,
+                'provider_cost_usd' => 0,
+                'user_credit_cost' => 0,
+                'profit_usd' => 0,
+                'duration' => 0,
+            ]);
+
+            // Dispatch job for async processing
+            ProcessGenerationJob::dispatch(
+                $generation->id,
+                $request->user()->id,
+                $model->id
             );
-            
-            // Return result, maybe flash message or Inertia back with data
+
+            // Return immediate response
             return redirect()->back()->with([
-                'success' => 'Generation successful!',
-                'generation_result' => $generation,
+                'success' => 'Generation started! You will be notified when it completes.',
+                'generation_id' => $generation->id,
+                'generation_status' => 'pending',
             ]);
         } catch (\Exception $e) {
-            return redirect()->back()->with('error', 'Generation failed: ' . $e->getMessage());
+            Log::error('Generation dispatch failed: ' . $e->getMessage());
+            return redirect()->back()->withErrors(['error' => 'Failed to start generation: ' . $e->getMessage()]);
         }
     }
 }

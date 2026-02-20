@@ -28,6 +28,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/models', [AiModelController::class, 'index'])->name('models.index');
     Route::get('/models/{slug}', [AiModelController::class, 'show'])->name('models.show');
+    Route::get('/models/{slug}/docs', [AiModelController::class, 'docs'])->name('models.docs');
     Route::post('/generate', [GenerationController::class, 'store'])->name('generate');
     Route::get('/generations', [GenerationController::class, 'index'])->name('generations.index');
 
@@ -44,6 +45,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // Video generation routes
     Route::post('/apps/luna-influencer/generate-video', [AppsController::class, 'generateLunaVideo'])->name('apps.luna-influencer.generate-video');
+
+    // Dynamic Apps
+    Route::post('/apps/execution/{execution}/approve', [AppsController::class, 'approve'])->name('apps.execution.approve');
+    Route::get('/apps/execution/{execution}', [AppsController::class, 'executionStatus'])->name('apps.execution.status');
+    Route::post('/apps/{slug}/execute', [AppsController::class, 'execute'])->name('apps.execute');
+    Route::get('/apps/{slug}', [AppsController::class, 'show'])->name('apps.show');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

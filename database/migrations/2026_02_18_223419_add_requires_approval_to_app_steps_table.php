@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('providers', function (Blueprint $table) {
-            $table->string('type')->after('slug')->default('custom'); // custom, fal_ai, replicate
+        Schema::table('app_steps', function (Blueprint $table) {
+            $table->boolean('requires_approval')->default(false)->after('order');
         });
     }
 
@@ -21,8 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('providers', function (Blueprint $table) {
-            $table->dropColumn('type');
+        Schema::table('app_steps', function (Blueprint $table) {
+            $table->dropColumn('requires_approval');
         });
     }
 };

@@ -75,7 +75,7 @@ export default function Dashboard({ aiModels, auth, flash }: DashboardProps) {
     return (
         <AuthenticatedLayout
             header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
+                <h2 className="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
                     KolayZeka Hub
                 </h2>
             }
@@ -99,8 +99,8 @@ export default function Dashboard({ aiModels, auth, flash }: DashboardProps) {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* Sidebar: Models */}
-                        <div className="bg-white shadow-sm sm:rounded-lg p-6 h-fit">
-                            <h3 className="font-bold text-lg mb-4 text-gray-700">Available Models</h3>
+                        <div className="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 h-fit">
+                            <h3 className="font-bold text-lg mb-4 text-gray-700 dark:text-gray-200">Available Models</h3>
                             {aiModels.length === 0 ? (
                                 <p className="text-gray-500 text-sm">No active models found.</p>
                             ) : (
@@ -112,7 +112,7 @@ export default function Dashboard({ aiModels, auth, flash }: DashboardProps) {
                                                 className={`w-full text-left px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2
                                                     ${selectedModel?.id === model.id 
                                                         ? 'bg-indigo-600 text-white' 
-                                                        : 'hover:bg-gray-100 text-gray-700'
+                                                        : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
                                                     }`}
                                             >
                                                 {model.image_url && (
@@ -127,13 +127,13 @@ export default function Dashboard({ aiModels, auth, flash }: DashboardProps) {
                         </div>
 
                         {/* Main Content */}
-                        <div className="md:col-span-2 bg-white shadow-sm sm:rounded-lg p-6">
+                        <div className="md:col-span-2 bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
                             {selectedModel ? (
                                 <div>
                                     <div className="flex justify-between items-start mb-6 border-b pb-4">
                                         <div>
-                                            <h3 className="text-2xl font-bold text-gray-900">{selectedModel.name}</h3>
-                                            <p className="text-sm text-gray-500 mt-1">{selectedModel.category}</p>
+                                            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{selectedModel.name}</h3>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{selectedModel.category}</p>
                                         </div>
                                         <div className="text-right">
                                             <span className="block text-sm text-gray-500">Your Credit Balance</span>
@@ -141,11 +141,11 @@ export default function Dashboard({ aiModels, auth, flash }: DashboardProps) {
                                         </div>
                                     </div>
 
-                                    <p className="text-gray-600 mb-8">{selectedModel.description}</p>
+                                    <p className="text-gray-600 dark:text-gray-300 mb-8">{selectedModel.description}</p>
 
                                     <form onSubmit={submit} className="space-y-6">
-                                            <div className="bg-white p-6 rounded-xl border border-gray-100">
-                                                <h4 className="font-bold text-gray-800 mb-6 border-b border-gray-200 pb-3 flex items-center gap-2">
+                                            <div className="bg-white dark:bg-gray-900/50 p-6 rounded-xl border border-gray-100 dark:border-gray-700">
+                                                <h4 className="font-bold text-gray-800 dark:text-gray-200 mb-6 border-b border-gray-200 dark:border-gray-700 pb-3 flex items-center gap-2">
                                                     <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                                                     </svg>
@@ -189,8 +189,8 @@ export default function Dashboard({ aiModels, auth, flash }: DashboardProps) {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                                         </svg>
                                     </div>
-                                    <h3 className="text-lg font-medium text-gray-900">Get Started</h3>
-                                    <p className="mt-2 text-sm text-gray-500">Select an AI model from the sidebar to begin creating.</p>
+                                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Get Started</h3>
+                                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Select an AI model from the sidebar to begin creating.</p>
                                 </div>
                             )}
                         </div>

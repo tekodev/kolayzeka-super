@@ -24,6 +24,9 @@ class AppServiceProvider extends ServiceProvider
         if (app()->isProduction()) {
             URL::forceScheme('https');
         }
+        
+        \App\Models\Generation::observe(\App\Observers\GenerationObserver::class);
+        
         Vite::prefetch(concurrency: 3);
     }
 }

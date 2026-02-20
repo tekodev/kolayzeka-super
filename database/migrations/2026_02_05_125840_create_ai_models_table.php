@@ -15,7 +15,6 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('slug')->unique();
-            $table->string('category')->nullable();
             $table->text('description')->nullable();
             $table->string('image_url')->nullable();
             $table->boolean('is_active')->default(true);

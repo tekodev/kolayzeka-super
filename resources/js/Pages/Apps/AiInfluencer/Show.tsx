@@ -48,7 +48,6 @@ export default function AiInfluencerShow({ auth }: { auth: any }) {
         
         if (generation && generation.status === 'processing') {
             const interval = setInterval(() => {
-                console.log('Polling for generation status...', generation.id);
                 import('@inertiajs/react').then(({ router }) => {
                      // @ts-ignore
                      router.reload({ 
@@ -159,7 +158,6 @@ export default function AiInfluencerShow({ auth }: { auth: any }) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('Submitting AI Influencer Generation Request', data);
         post(route('apps.ai-influencer.generate'), {
             forceFormData: true,
             preserveScroll: true,

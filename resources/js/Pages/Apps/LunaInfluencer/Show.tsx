@@ -47,19 +47,12 @@ export default function LunaInfluencerShow({ auth }: { auth: any }) {
         const generation = (props as any).latest_generation || (props as any).generation;
         
         if (generation && generation.status === 'processing') {
-            console.log('Start polling for generation...', generation.id);
             const interval = setInterval(() => {
                 router.reload({ 
                     only: ['latest_generation'],
                     // @ts-ignore
                     preserveScroll: true,
                     preserveState: true,
-                    onSuccess: (page) => {
-                        console.log('Poll success', page);
-                    },
-                    onError: (errors) => {
-                        console.error('Poll error', errors);
-                    }
                 });
             }, 3000); // 3 seconds interval
             return () => clearInterval(interval);
@@ -164,7 +157,6 @@ export default function LunaInfluencerShow({ auth }: { auth: any }) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('Submitting Luna Generation Request', data);
         post(route('apps.luna-influencer.generate'), {
             forceFormData: true,
             preserveScroll: true,

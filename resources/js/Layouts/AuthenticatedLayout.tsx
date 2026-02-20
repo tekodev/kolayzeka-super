@@ -1,28 +1,35 @@
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import Dropdown from '@/Components/Dropdown';
+import NotificationsDropdown from '@/Components/NotificationsDropdown';
+import ThemeToggle from '@/Components/ThemeToggle';
 import NavLink from '@/Components/NavLink';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink';
 import { Link, usePage } from '@inertiajs/react';
 import { PropsWithChildren, ReactNode, useState } from 'react';
+import { Toaster } from 'react-hot-toast';
+import { useGenerationNotifications } from '@/Hooks/useGenerationNotifications';
 
 export default function Authenticated({
     header,
     children,
 }: PropsWithChildren<{ header?: ReactNode }>) {
     const user = usePage().props.auth.user;
+    
+    // Initialize generation notifications
+    useGenerationNotifications();
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            <nav className="border-b border-gray-100 bg-white">
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+            <nav className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="flex h-16 justify-between">
                         <div className="flex">
                             <div className="flex shrink-0 items-center">
                                 <Link href="/">
-                                    <ApplicationLogo className="block h-9 w-auto fill-current text-gray-800" />
+                                    <ApplicationLogo className="block h-9 w-auto fill-current text-gray-800 dark:text-gray-200" />
                                 </Link>
                             </div>
 
@@ -40,28 +47,30 @@ export default function Authenticated({
                                     AI Hub
                                 </NavLink>
                                 <NavLink
-                                    href={route('generations.index')}
-                                    active={route().current('generations.*')}
-                                >
-                                    History
-                                </NavLink>
-                                <NavLink
                                     href={route('apps.index')}
                                     active={route().current('apps.*')}
                                 >
                                     Apps
                                 </NavLink>
+                                <NavLink
+                                    href={route('generations.index')}
+                                    active={route().current('generations.*')}
+                                >
+                                    History
+                                </NavLink>
                             </div>
                         </div>
 
-                        <div className="hidden sm:ms-6 sm:flex sm:items-center">
+                        <div className="hidden sm:ms-6 sm:flex sm:items-center gap-2">
+                            <ThemeToggle />
+                            <NotificationsDropdown />
                             <div className="relative ms-3">
                                 <Dropdown>
                                     <Dropdown.Trigger>
                                         <span className="inline-flex rounded-md">
                                             <button
                                                 type="button"
-                                                className="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
+                                                className="inline-flex items-center rounded-md border border-transparent bg-white dark:bg-gray-800 px-3 py-2 text-sm font-medium leading-4 text-gray-500 dark:text-gray-300 transition duration-150 ease-in-out hover:text-gray-700 dark:hover:text-gray-100 focus:outline-none"
                                             >
                                                 {user.name}
 
@@ -99,7 +108,9 @@ export default function Authenticated({
                             </div>
                         </div>
 
-                        <div className="-me-2 flex items-center sm:hidden">
+                        <div className="-me-2 flex items-center gap-2 sm:hidden">
+                            <ThemeToggle />
+                            <NotificationsDropdown />
                             <button
                                 onClick={() =>
                                     setShowingNavigationDropdown(
@@ -162,25 +173,25 @@ export default function Authenticated({
                             AI Hub
                         </ResponsiveNavLink>
                         <ResponsiveNavLink
-                            href={route('apps.index')}
-                            active={route().current('apps.*')}
-                        >
-                            Apps
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
                             href={route('generations.index')}
                             active={route().current('generations.*')}
                         >
                             History
                         </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            href={route('apps.index')}
+                            active={route().current('apps.*')}
+                        >
+                            Apps
+                        </ResponsiveNavLink>
                     </div>
 
-                    <div className="border-t border-gray-200 pb-1 pt-4">
+                    <div className="border-t border-gray-200 dark:border-gray-700 pb-1 pt-4">
                         <div className="px-4">
-                            <div className="text-base font-medium text-gray-800">
+                            <div className="text-base font-medium text-gray-800 dark:text-gray-200">
                                 {user.name}
                             </div>
-                            <div className="text-sm font-medium text-gray-500">
+                            <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
                                 {user.email}
                             </div>
                         </div>
@@ -202,7 +213,7 @@ export default function Authenticated({
             </nav>
 
             {header && (
-                <header className="bg-white shadow">
+                <header className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700">
                     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
                         {header}
                     </div>
@@ -210,6 +221,9 @@ export default function Authenticated({
             )}
 
             <main>{children}</main>
+            
+            {/* Toast notifications */}
+            <Toaster position="top-right" />
         </div>
     );
 }

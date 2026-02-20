@@ -87,6 +87,12 @@ class SchemaGeneratorService
             $type = $this->mapType($prop['type'] ?? 'string', $key);
             $label = $prop['title'] ?? ucfirst(str_replace('_', ' ', $key));
             $default = $prop['default'] ?? null;
+            
+            // Ensure array/object defaults are stringified for Text/Textarea inputs
+            if (is_array($default) || is_object($default)) {
+                $default = json_encode($default, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            }
+
             $description = $prop['description'] ?? null;
             
             $schemaItem = [
@@ -134,6 +140,35 @@ class SchemaGeneratorService
             $outputSchema = $data['output_schema'];
         } elseif (isset($data['openapi']['components']['schemas'][$outputSchemaName])) {
             $outputSchema = $data['openapi']['components']['schemas'][$outputSchemaName];
+        }
+
+        // Logic to suggest a Response Path based on output properties
+        $suggestedPath = null;
+        if (isset($outputSchema['properties'])) {
+            $outProps = $outputSchema['properties'];
+            $outKeys = array_keys($outProps);
+
+            // Priority keywords for response paths
+            $priorityKeywords = ['verdict', 'url', 'image', 'text', 'content', 'result'];
+            
+            foreach ($priorityKeywords as $keyword) {
+                foreach ($outKeys as $oKey) {
+                    if (str_contains(strtolower($oKey), $keyword)) {
+                        $suggestedPath = $oKey;
+                        break 2;
+                    }
+                }
+            }
+
+            // Fallback for nested images (Replicate/Fal style)
+            if (!$suggestedPath && isset($outProps['images'])) {
+                $suggestedPath = '';
+            }
+            
+            // Final fallback: just take the first property if it's simple
+            if (!$suggestedPath && !empty($outKeys)) {
+                $suggestedPath = $outKeys[0];
+            }
         }
         
         // If output schema is simple (just a string/uri), enhance it with description
@@ -191,6 +226,7 @@ class SchemaGeneratorService
             'input_schema' => $clientSchema, // Array format
             'output_schema' => $apiContract, // Full API contract
             'field_mapping' => $fieldMapping,
+            'suggested_response_path' => $suggestedPath,
         ];
     }
 

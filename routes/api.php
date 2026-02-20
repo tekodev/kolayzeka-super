@@ -11,4 +11,8 @@ Route::get('/ai-models/{slug}', [\App\Http\Controllers\Api\AiModelController::cl
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/models/{slug}/generate', [\App\Http\Controllers\Api\GenerationController::class, 'generate']);
     Route::get('/generations', [\App\Http\Controllers\Api\GenerationController::class, 'index']);
+    
+    // Dynamic Apps API
+    Route::post('/apps/{slug}/execute', [\App\Http\Controllers\Api\AppController::class, 'execute']);
+    Route::get('/apps/execution/{id}', [\App\Http\Controllers\Api\AppController::class, 'status']);
 });

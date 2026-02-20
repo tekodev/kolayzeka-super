@@ -17,7 +17,7 @@ class CostStrategyResource extends Resource
 {
     protected static ?string $model = CostStrategy::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-banknotes';
 
     public static function form(Form $form): Form
     {

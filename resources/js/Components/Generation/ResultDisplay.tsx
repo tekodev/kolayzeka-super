@@ -54,14 +54,10 @@ export default function ResultDisplay({ generation, error, onCreateVideo }: Resu
                 <div className="flex justify-center bg-gray-50 rounded-2xl p-4 min-h-[300px] items-center border border-gray-100 overflow-hidden relative group">
                     {generation.output_data?.result ? (
                         <div 
-                            className="relative overflow-hidden rounded-xl shadow-2xl cursor-zoom-in w-full max-w-lg mx-auto"
-                            onMouseMove={handleMouseMove}
-                            onMouseEnter={() => setIsHovering(true)}
-                            onMouseLeave={() => setIsHovering(false)}
-                            onClick={() => window.open(generation.output_data.result, '_blank')}
+                            className="relative overflow-hidden rounded-xl shadow-2xl w-full max-w-lg mx-auto"
                         >
-                            {/* Check if result is video or image */}
-                            {typeof generation.output_data.result === 'string' && generation.output_data.result.match(/\.(mp4|webm)(\?|$)/) ? (
+                            {/* Rendering based on output_type or regex fallback */}
+                            {((generation.output_type === 'video' || generation.ai_model?.output_type === 'video' || (!generation.output_type && !generation.ai_model?.output_type && typeof generation.output_data.result === 'string' && generation.output_data.result.match(/\.(mp4|webm)(\?|$)/)))) ? (
                                 <video 
                                     src={generation.output_data.result} 
                                     className="w-full h-auto rounded-xl"
@@ -71,16 +67,40 @@ export default function ResultDisplay({ generation, error, onCreateVideo }: Resu
                                     muted
                                     playsInline
                                 />
+                            ) : (generation.output_type === 'text' || generation.ai_model?.output_type === 'text' || generation.output_type === 'json' || generation.ai_model?.output_type === 'json' || (typeof generation.output_data.result === 'string' && !generation.output_data.result.startsWith('http'))) ? (
+                                <div className="p-6 bg-white rounded-xl border border-gray-100 shadow-sm w-full">
+                                    <pre className="whitespace-pre-wrap font-sans text-gray-700 leading-relaxed text-sm">
+                                        {typeof generation.output_data.result === 'object' 
+                                            ? JSON.stringify(generation.output_data.result, null, 2) 
+                                            : generation.output_data.result
+                                        }
+                                    </pre>
+                                </div>
+                            ) : (generation.output_type === 'audio' || generation.ai_model?.output_type === 'audio') ? (
+                                <div className="p-6 bg-white rounded-xl border border-gray-100 shadow-sm w-full flex flex-col items-center">
+                                     <svg className="w-16 h-16 text-indigo-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                    </svg>
+                                    <audio src={generation.output_data.result} controls className="w-full" />
+                                </div>
                             ) : (
-                                <img 
-                                    src={typeof generation.output_data.result === 'string' ? generation.output_data.result : ''} 
-                                    className="w-full h-auto object-cover transition-transform duration-200 ease-out"
-                                    style={{
-                                        transformOrigin: `${mousePosition.x}% ${mousePosition.y}%`,
-                                        transform: isHovering ? 'scale(2.5)' : 'scale(1)',
-                                    }}
-                                    alt="Generated Outcome"
-                                />
+                                <div 
+                                    className="relative cursor-zoom-in group-hover:scale-[1.02] transition-transform duration-300"
+                                    onMouseMove={handleMouseMove}
+                                    onMouseEnter={() => setIsHovering(true)}
+                                    onMouseLeave={() => setIsHovering(false)}
+                                    onClick={() => window.open(generation.output_data.result, '_blank')}
+                                >
+                                    <img 
+                                        src={typeof generation.output_data.result === 'string' ? generation.output_data.result : ''} 
+                                        className="w-full h-auto object-cover rounded-xl transition-transform duration-200 ease-out"
+                                        style={{
+                                            transformOrigin: `${mousePosition.x}% ${mousePosition.y}%`,
+                                            transform: isHovering ? 'scale(2.5)' : 'scale(1)',
+                                        }}
+                                        alt="Generated Outcome"
+                                    />
+                                </div>
                             )}
                         </div>
                     ) : generation.status === 'processing' ? (
@@ -97,7 +117,7 @@ export default function ResultDisplay({ generation, error, onCreateVideo }: Resu
                                 <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
-                            </div>
+                             </div>
                             <h3 className="text-lg leading-6 font-medium text-red-900">İşlem Tamamlanamadı</h3>
                             <div className="mt-2">
                                 <p className="text-sm text-red-700">
@@ -136,18 +156,6 @@ export default function ResultDisplay({ generation, error, onCreateVideo }: Resu
                             </svg>
                             İndir
                         </button>
-
-                        {onCreateVideo && (
-                            <button
-                                onClick={onCreateVideo}
-                                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
-                                Video Oluştur
-                            </button>
-                        )}
                     </div>
                 )}
                 

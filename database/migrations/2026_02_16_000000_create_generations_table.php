@@ -23,6 +23,21 @@ return new class extends Migration
             $table->integer('user_credit_cost')->nullable();
             $table->decimal('profit_usd', 12, 6)->nullable();
             $table->text('error_message')->nullable();
+            
+            // Merged from separate migrations:
+            $table->float('duration')->nullable();
+            $table->json('provider_request_body')->nullable();
+            $table->text('thumbnail_url')->nullable();
+            
+            // Video fields
+            $table->unsignedBigInteger('parent_generation_id')->nullable();
+            $table->text('video_prompt')->nullable();
+            $table->json('video_config')->nullable();
+
+            $table->foreignId('app_execution_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('app_step_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreign('parent_generation_id')->references('id')->on('generations')->onDelete('cascade');
+
             $table->timestamps();
         });
     }

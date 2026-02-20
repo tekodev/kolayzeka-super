@@ -19,7 +19,9 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
              RoleSeeder::class,
-             GoogleProviderSeeder::class,
+             CategorySeeder::class,
+             AiSystemSeeder::class,
+             LunaDynamicAppSeeder::class,
         ]);
     }
 }

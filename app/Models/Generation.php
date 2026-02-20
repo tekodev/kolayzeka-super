@@ -15,15 +15,21 @@ class Generation extends Model
         'status',
         'input_data',
         'output_data',
+        'thumbnail_url',
         'provider_cost_usd',
         'user_credit_cost',
         'profit_usd',
         'error_message',
+        'duration',
+        'provider_request_body',
+        'app_execution_id',
+        'app_step_id',
     ];
 
     protected $casts = [
         'input_data' => 'array',
         'output_data' => 'array',
+        'provider_request_body' => 'array',
         'provider_cost_usd' => 'decimal:6',
         'profit_usd' => 'decimal:6',
     ];
@@ -41,6 +47,11 @@ class Generation extends Model
     public function provider()
     {
         return $this->belongsTo(AiModelProvider::class, 'ai_model_provider_id');
+    }
+
+    public function appExecution()
+    {
+        return $this->belongsTo(AppExecution::class);
     }
 
     /**

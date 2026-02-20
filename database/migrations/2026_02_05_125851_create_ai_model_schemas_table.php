@@ -19,6 +19,12 @@ return new class extends Migration
             $table->json('output_schema')->nullable();
             $table->json('field_mapping')->nullable();
             $table->json('default_values')->nullable();
+            
+            // Merged from separate migrations:
+            $table->json('request_template')->nullable()->comment('Raw JSON body with {{placeholders}}');
+            $table->string('response_path')->nullable()->comment('Dot notation path to result');
+            
+            $table->string('interaction_method')->default('synchronous')->comment('synchronous, long_running');
             $table->timestamps();
         });
     }

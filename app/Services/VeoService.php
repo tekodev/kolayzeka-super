@@ -16,6 +16,11 @@ class VeoService
         $this->apiKey = config('services.google.key');
     }
 
+    public function setApiKey(string $key): void
+    {
+        $this->apiKey = $key;
+    }
+
     /**
      * Generate video from image using Veo 3.1
      * 

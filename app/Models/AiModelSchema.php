@@ -15,29 +15,17 @@ class AiModelSchema extends Model
         'output_schema',
         'field_mapping',
         'default_values',
+        'request_template',
+        'response_path',
     ];
 
     protected $casts = [
+        'input_schema' => 'array',
+        'output_schema' => 'array',
         'field_mapping' => 'array',
         'default_values' => 'array',
+        'request_template' => 'array',
     ];
-
-    // Laravel 12 Attribute accessors to parse JSON strings
-    protected function inputSchema(): \Illuminate\Database\Eloquent\Casts\Attribute
-    {
-        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
-            get: fn ($value) => is_string($value) ? json_decode($value, true) : $value,
-            set: fn ($value) => is_array($value) ? json_encode($value) : $value,
-        );
-    }
-
-    protected function outputSchema(): \Illuminate\Database\Eloquent\Casts\Attribute
-    {
-        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
-            get: fn ($value) => is_string($value) ? json_decode($value, true) : $value,
-            set: fn ($value) => is_array($value) ? json_encode($value) : $value,
-        );
-    }
 
     public function provider()
     {

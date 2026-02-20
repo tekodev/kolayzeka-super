@@ -20,8 +20,6 @@ export default function VideoGenerationForm({ generationId, routeName, originalP
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('VideoGenerationForm: Submitting video generation request...', data);
-        console.log('VideoGenerationForm: Route is:', routeName);
         
         post(route(routeName), {
             preserveScroll: true,

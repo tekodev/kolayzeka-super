@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('ai_model_providers', function (Blueprint $table) {
             $table->id();
             $table->foreignId('ai_model_id')->constrained()->cascadeOnDelete();
-            $table->string('provider_name')->comment('fal, replicate, runpod');
+            $table->foreignId('provider_id')->constrained()->cascadeOnDelete();
             $table->string('provider_model_id');
             $table->boolean('is_primary')->default(false);
             $table->string('price_mode')->default('strategy')->comment('fixed, strategy');

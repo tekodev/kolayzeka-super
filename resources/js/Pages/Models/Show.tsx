@@ -4,10 +4,13 @@ import React, { useState, FormEventHandler, useEffect } from 'react';
 import PrimaryButton from '@/Components/PrimaryButton';
 import DynamicForm from '@/Components/Generation/DynamicForm';
 import ResultDisplay from '@/Components/Generation/ResultDisplay';
+import toast from 'react-hot-toast';
 
 interface ModelShowProps {
     auth: any;
     aiModel: any;
+    initialData?: Record<string, any>; // Data from reprompt
+    repromptResult?: any; // Result from reprompt
     flash: {
         success?: string;
         error?: string;
@@ -15,20 +18,24 @@ interface ModelShowProps {
     };
 }
 
-export default function Show({ aiModel, auth, flash }: ModelShowProps) {
+export default function Show({ aiModel, auth, flash, initialData, repromptResult }: ModelShowProps) {
     const user = auth.user;
     const provider = aiModel.providers?.[0];
     const schema = provider?.schema?.input_schema || [];
     
     // Initialize form with defaults from schema
-    const initialData: Record<string, any> = {};
+    const defaultValues: Record<string, any> = {};
     schema.forEach((field: any) => {
-        initialData[field.key] = field.default !== undefined ? field.default : '';
+        defaultValues[field.key] = field.default !== undefined ? field.default : '';
     });
+
+    // Merge reprompt data if exists
+    // Note: reprompt data keys might need casting if they came from JSON (Backend usually sends correct types though)
+    const formValues = initialData ? { ...defaultValues, ...initialData } : defaultValues;
 
     const { data, setData, post, processing, errors, reset, transform } = useForm({
         ai_model_id: aiModel.id,
-        input_data: initialData,
+        input_data: formValues,
     });
 
     // Inertia useForm helper for dynamic nested objects
@@ -49,8 +56,14 @@ export default function Show({ aiModel, auth, flash }: ModelShowProps) {
         post(route('generate'), {
             forceFormData: true, // Crucial for file uploads
             onSuccess: () => {
-                // Scroll to result or handle success
+                toast.success('Generation started! You will be notified when it completes.', {
+                    duration: 4000,
+                    icon: '🚀'
+                });
             },
+            onError: () => {
+                toast.error('Failed to start generation. Please check inputs.');
+            }
         });
     };
 
@@ -114,13 +127,25 @@ export default function Show({ aiModel, auth, flash }: ModelShowProps) {
                         <div className="lg:col-span-2 space-y-8">
                             
                             {/* Generation Form */}
-                            <div className="bg-white shadow-sm sm:rounded-2xl border border-gray-100 p-8">
-                                <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-                                    <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                                    </svg>
-                                    Configuration
-                                </h3>
+                            <div className="bg-white shadow-sm sm:rounded-2xl border border-gray-100 overflow-hidden">
+                                <div className="flex border-b border-gray-50 bg-gray-50/30">
+                                    <button className="px-8 py-4 text-sm font-black uppercase tracking-widest text-indigo-600 border-b-2 border-indigo-600 bg-white">
+                                        Configuration
+                                    </button>
+                                    <Link 
+                                        href={route('models.docs', aiModel.slug)}
+                                        className="px-8 py-4 text-sm font-bold uppercase tracking-widest text-gray-400 hover:text-indigo-600 hover:bg-gray-50 transition-all"
+                                    >
+                                        Documentation
+                                    </Link>
+                                </div>
+                                <div className="p-8">
+                                    <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                                        <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                        </svg>
+                                        Settings
+                                    </h3>
 
                                 <form onSubmit={submit} className="space-y-8">
                                     <DynamicForm 
@@ -147,11 +172,16 @@ export default function Show({ aiModel, auth, flash }: ModelShowProps) {
                                     </div>
                                 </form>
                             </div>
+                        </div>
 
                             {/* Result Display */}
                             <div className="mt-8">
                                 <ResultDisplay 
-                                    generation={flash.generation_result}
+                                    generation={
+                                        (flash.generation_result || repromptResult) 
+                                            ? { ...(flash.generation_result || repromptResult), output_type: aiModel.output_type }
+                                            : null
+                                    }
                                     error={flash.error}
                                 />
                             </div>

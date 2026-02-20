@@ -12,28 +12,40 @@ class AppsController extends Controller
 {
     public function __construct(
         protected GenerationService $generationService,
-        protected \App\Services\GoogleFileManager $googleFileManager
+        protected \App\Services\AppExecutionService $appExecutionService
     ) {}
 
     public function index()
     {
-        return Inertia::render('Apps/Index', [
-            'apps' => [
-                [
-                    'id' => 'luna-influencer',
-                    'name' => 'Luna Influencer',
-                    'description' => 'Create consistent, high-fidelity influencer photos with professional camera controls.',
-                    'icon' => 'camera', // Placeholder for now
-                    'route' => route('apps.luna-influencer.show'),
-                ],
-                [
-                    'id' => 'ai-influencer',
-                    'name' => 'AI Influencer',
-                    'description' => 'Create custom influencer photos with your own reference images.',
-                    'icon' => 'user-group', // Placeholder
-                    'route' => route('apps.ai-influencer.show'),
-                ]
+        $dynamicApps = \App\Models\App::where('is_active', true)->get()->map(function ($app) {
+            return [
+                'id' => $app->slug,
+                'name' => $app->name,
+                'description' => $app->description,
+                'icon' => $app->icon,
+                'route' => route('apps.show', $app->slug),
+            ];
+        });
+
+        $hardcodedApps = collect([
+            [
+                'id' => 'luna-influencer',
+                'name' => 'Luna Influencer',
+                'description' => 'Create consistent, high-fidelity influencer photos with professional camera controls.',
+                'icon' => 'camera',
+                'route' => route('apps.luna-influencer.show'),
+            ],
+            [
+                'id' => 'ai-influencer',
+                'name' => 'AI Influencer',
+                'description' => 'Create custom influencer photos with your own reference images.',
+                'icon' => 'user-group',
+                'route' => route('apps.ai-influencer.show'),
             ]
+        ]);
+
+        return Inertia::render('Apps/Index', [
+            'apps' => $hardcodedApps->merge($dynamicApps)->values()->toArray()
         ]);
     }
 
@@ -361,123 +373,7 @@ Absolute realism and maximum fidelity to all reference images.";
      */
     public function generateLunaVideo(Request $request)
     {
-        Log::info("[AppsController] generateLunaVideo called", ['request_all' => $request->all()]);
-        $validated = $request->validate([
-            'generation_id' => 'required|exists:generations,id',
-            'video_prompt' => 'required|string|max:2000',
-            'camera_movement' => 'nullable|string',
-            'duration' => 'nullable|in:4,6,8',
-            'resolution' => 'nullable|in:720p,1080p,4k',
-            'negative_prompt' => 'nullable|string',
-        ]);
-
-        try {
-            $veoService = app(\App\Services\VeoService::class);
-            
-            // Fetch original generation
-            $originalGeneration = \App\Models\Generation::findOrFail($validated['generation_id']);
-            
-            // Extract base64 from output_data
-            $outputData = $originalGeneration->output_data;
-
-            // Handle string/json case just in case
-            if (is_string($outputData)) {
-                $outputData = json_decode($outputData, true);
-            }
-
-            // Path 1: Direct inlineData
-            $imageBase64 = $outputData['inlineData']['data'] ?? null;
-
-            // Path 2: Nested candidates (Gemini standard)
-            if (!$imageBase64) {
-                $imageBase64 = $outputData['candidates'][0]['content']['parts'][0]['inlineData']['data'] ?? null;
-            }
-
-            // Path 3: bytesBase64Encoded (Veo standard)
-            if (!$imageBase64) {
-                // Check recursive
-                $findKey = function($array, $key) use (&$findKey) {
-                    foreach ($array as $k => $v) {
-                        if ($k === $key) return $v;
-                        if (is_array($v)) {
-                            $result = $findKey($v, $key);
-                            if ($result) return $result;
-                        }
-                    }
-                    return null;
-                };
-                
-                $inlineData = $findKey($outputData, 'inlineData');
-                $imageBase64 = $inlineData['data'] ?? null;
-                
-                if (!$imageBase64) {
-                     $bytesBase64 = $findKey($outputData, 'bytesBase64Encoded');
-                     $imageBase64 = $bytesBase64;
-                }
-            }
-            
-            if (!$imageBase64) {
-                Log::error('[AppsController] No base64 found in output_data', [
-                    'generation_id' => $validated['generation_id'],
-                    'output_data_keys' => is_array($outputData) ? array_keys($outputData) : 'not_array'
-                ]);
-                return back()->withErrors(['error' => 'Original generation has no base64 image data']);
-            }
-
-            Log::info('[AppsController] Preparing video generation', [
-                'generation_id' => $validated['generation_id'],
-                'base64_length' => strlen($imageBase64),
-            ]);
-
-            // Build video config
-            $videoConfig = [
-                'aspectRatio' => '9:16',
-                // 'resolution' is not supported by Veo 3.1 directly in this payload format (default 720p)
-                'durationSeconds' => $validated['duration'] ?? '8',
-                'personGeneration' => 'allow_adult',
-            ];
-
-                // Start video generation
-                Log::info('[AppsController] Calling VeoService::generateVideoFromImage...');
-                $operation = $veoService->generateVideoFromImage(
-                    $imageBase64,
-                    $validated['video_prompt'],
-                    $videoConfig
-                );
-                Log::info('[AppsController] Veo API returned operation', ['operation' => $operation]);
-
-                // Create new generation record for video
-                Log::info('[AppsController] Creating video generation record in DB...');
-                $videoGeneration = \App\Models\Generation::create([
-                    'user_id' => auth()->id(),
-                    'ai_model_id' => $originalGeneration->ai_model_id,
-                    'ai_model_provider_id' => $originalGeneration->ai_model_provider_id,
-                    'parent_generation_id' => $originalGeneration->id,
-                    'status' => 'processing',
-                    'video_prompt' => $validated['video_prompt'],
-                    'video_config' => $videoConfig,
-                    'input_data' => [
-                        'video_prompt' => $validated['video_prompt'],
-                        'camera_movement' => $validated['camera_movement'] ?? null,
-                        'operation_name' => $operation['name'] ?? null,
-                    ],
-                ]);
-                Log::info('[AppsController] Video generation record created', ['id' => $videoGeneration->id]);
-
-                // Dispatch job to check status
-                Log::info('[AppsController] Dispatching CheckVideoGenerationStatus job', ['generation_id' => $videoGeneration->id]);
-                \App\Jobs\CheckVideoGenerationStatus::dispatch($videoGeneration)->delay(now()->addSeconds(10));
-                Log::info('[AppsController] Job dispatched successfully');
-
-                return back()->with('success', 'Video generation started! This may take 1-6 minutes.');
-
-            } catch (\Exception $e) {
-                Log::error('[AppsController] Video generation failed', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-                return back()->withErrors(['error' => 'Video generation failed: ' . $e->getMessage()]);
-            }
+        return $this->processVideoGeneration($request);
     }
 
     /**
@@ -485,41 +381,56 @@ Absolute realism and maximum fidelity to all reference images.";
      */
     public function generateAiVideo(Request $request)
     {
-        Log::info("[AppsController] generateAiVideo called", ['request_all' => $request->all()]);
+        return $this->processVideoGeneration($request);
+    }
+
+    /**
+     * Common Video Processing Logic
+     */
+    protected function processVideoGeneration(Request $request)
+    {
+        Log::info("[AppsController] processVideoGeneration called", ['request_all' => $request->all()]);
         $validated = $request->validate([
             'generation_id' => 'required|exists:generations,id',
             'video_prompt' => 'required|string|max:2000',
             'camera_movement' => 'nullable|string',
             'duration' => 'nullable|in:4,6,8',
-            'resolution' => 'nullable|in:720p,1080p,4k',
+            'resolution' => 'nullable|in:720p,1080p,4k', // Kept for validation, though Veo might ignore
             'negative_prompt' => 'nullable|string',
         ]);
 
         try {
-            $veoService = app(\App\Services\VeoService::class);
+            // 1. Fetch Veo Model
+            $videoModelSlug = 'veo-3.1-fast-generate-preview'; // Ensure this matches DB seed
+            $model = AiModel::where('slug', $videoModelSlug)->first();
             
-            // Fetch original generation
+            if (!$model) {
+                 // Fallback or Error
+                 Log::error("[AppsController] Video model {$videoModelSlug} not found in DB.");
+                 return back()->withErrors(['error' => 'System Error: Video model configuration missing.']);
+            }
+
+            // 2. Fetch Original Generation
             $originalGeneration = \App\Models\Generation::findOrFail($validated['generation_id']);
             
-            // Extract base64 from output_data
+            // 3. Prepare Image Input (S3 URL preferred, Base64 fallback)
+            $imageUrl = null;
+            $uploadedFile = null;
+            $tempFilePath = null;
+
             $outputData = $originalGeneration->output_data;
+            if (is_string($outputData)) $outputData = json_decode($outputData, true);
 
-            // Handle string/json case just in case
-            if (is_string($outputData)) {
-                $outputData = json_decode($outputData, true);
+            // Strategy A: Check 'result' for S3 URL (New Standard)
+            if (isset($outputData['result']) && filter_var($outputData['result'], FILTER_VALIDATE_URL)) {
+                $imageUrl = $outputData['result'];
+                Log::info("[AppsController] Found image URL in original generation result: {$imageUrl}");
             }
-
-            // Path 1: Direct inlineData
-            $imageBase64 = $outputData['inlineData']['data'] ?? null;
-
-            // Path 2: Nested candidates (Gemini standard)
-            if (!$imageBase64) {
-                $imageBase64 = $outputData['candidates'][0]['content']['parts'][0]['inlineData']['data'] ?? null;
-            }
-
-            // Path 3: bytesBase64Encoded (Veo standard - recursive search)
-            if (!$imageBase64) {
-                // Check recursive
+            
+            // Strategy B: Extract Base64 from raw output (Legacy support)
+            if (!$imageUrl) {
+                // ... (Keep existing Base64 extraction logic as fallback) ...
+                 // Check recursive
                 $findKey = function($array, $key) use (&$findKey) {
                     foreach ($array as $k => $v) {
                         if ($k === $key) return $v;
@@ -538,69 +449,64 @@ Absolute realism and maximum fidelity to all reference images.";
                      $bytesBase64 = $findKey($outputData, 'bytesBase64Encoded');
                      $imageBase64 = $bytesBase64;
                 }
+
+                if ($imageBase64) {
+                    // Create Temp File for GenerationService expecting UploadedFile
+                    $tempFilePath = sys_get_temp_dir() . '/' . uniqid() . '.jpg'; // Assume JPG
+                    file_put_contents($tempFilePath, base64_decode($imageBase64));
+                    
+                    $uploadedFile = new \Illuminate\Http\UploadedFile(
+                        $tempFilePath,
+                        'source_image.jpg',
+                        'image/jpeg',
+                        null,
+                        true // Test mode = true allows local file
+                    );
+                    Log::info("[AppsController] Converted Base64 to Temp File: {$tempFilePath}");
+                }
             }
+
+            if (!$imageUrl && !$uploadedFile) {
+                return back()->withErrors(['error' => 'Could not retrieve source image from original generation.']);
+            }
+
+            // 4. Prepare Input Data for GenerationService
+            // Note: Schema expects 'image', 'prompt', 'aspectRatio', 'durationSeconds'
+            // We map our form fields to what schema likely expects, OR rely on schema mapping.
+            // Let's passed sanitized keys.
             
-            if (!$imageBase64) {
-                 Log::error('[AppsController] No base64 found in output_data', [
-                    'generation_id' => $validated['generation_id'],
-                    'output_data_keys' => is_array($outputData) ? array_keys($outputData) : 'not_array'
-                ]);
-                return back()->withErrors(['error' => 'Original generation has no base64 image data']);
-            }
-
-            Log::info('[AppsController] Preparing AI video generation', [
-                'generation_id' => $validated['generation_id'],
-                'base64_length' => strlen($imageBase64),
-            ]);
-
-            // Build video config
-            $videoConfig = [
-                'aspectRatio' => '9:16',
-                // 'resolution' is not supported by Veo 3.1 directly in this payload format (default 720p)
+            $inputData = [
+                'image' => $uploadedFile ?? $imageUrl, // Pass File or URL
+                'prompt' => $validated['video_prompt'],
+                'aspectRatio' => '9:16', // Fixed for apps as requested/seen in previous code
                 'durationSeconds' => $validated['duration'] ?? '8',
-                'personGeneration' => 'allow_adult',
+                // Persist other UI fields for context
+                'camera_movement' => $validated['camera_movement'] ?? null,
+                'resolution' => $validated['resolution'] ?? null,
             ];
 
-                // Start video generation
-                Log::info('[AppsController] AI Video - Calling VeoService...');
-                $operation = $veoService->generateVideoFromImage(
-                    $imageBase64,
-                    $validated['video_prompt'],
-                    $videoConfig
-                );
-                Log::info('[AppsController] AI Video - Veo API returned operation', ['operation' => $operation]);
+            // 5. Cleanup Temp File (After request? No, GenerationService handles upload immediately)
+            
+            // 6. Call Generation Service
+            Log::info("[AppsController] Calling GenerationService for Video...");
+            $videoGeneration = $this->generationService->generate($request->user(), $model, $inputData);
+            
+            // 7. Link to Parent Generation
+            $videoGeneration->update([
+                'parent_generation_id' => $originalGeneration->id
+            ]);
 
-                // Create new generation record for video
-                Log::info('[AppsController] AI Video - Creating DB record...');
-                $videoGeneration = \App\Models\Generation::create([
-                    'user_id' => auth()->id(),
-                    'ai_model_id' => $originalGeneration->ai_model_id,
-                    'ai_model_provider_id' => $originalGeneration->ai_model_provider_id,
-                    'parent_generation_id' => $originalGeneration->id,
-                    'status' => 'processing',
-                    'video_prompt' => $validated['video_prompt'],
-                    'video_config' => $videoConfig,
-                    'input_data' => [
-                        'video_prompt' => $validated['video_prompt'],
-                        'camera_movement' => $validated['camera_movement'] ?? null,
-                        'operation_name' => $operation['name'] ?? null,
-                    ],
-                ]);
-                Log::info('[AppsController] AI Video - Record created', ['id' => $videoGeneration->id]);
+            // Note: GenerationService dispatching job automatically for processing status.
+            
+            return back()->with('success', 'Video generation started! This may take 1-6 minutes.');
 
-                // Dispatch job to check status
-                Log::info('[AppsController] AI Video - Dispatching job...', ['generation_id' => $videoGeneration->id]);
-                \App\Jobs\CheckVideoGenerationStatus::dispatch($videoGeneration)->delay(now()->addSeconds(10));
-                Log::info('[AppsController] AI Video - Job dispatched');
-
-                return back()->with('success', 'Video generation started! This may take 1-6 minutes.');
         } catch (\Exception $e) {
-            Log::error('[AppsController] AI video generation failed', [
+            Log::error('[AppsController] Video generation failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
             return back()->withErrors(['error' => 'Video generation failed: ' . $e->getMessage()]);
-    }
+        }
     }
 
     public function download(\App\Models\Generation $generation)
@@ -660,4 +566,73 @@ Absolute realism and maximum fidelity to all reference images.";
         return redirect()->away($result);
     }
 
+    /**
+     * Show Dynamic App Page
+     */
+    public function show($slug)
+    {
+        // 1. Check hardcoded apps first (legacy support)
+        if ($slug === 'luna-influencer') return $this->showLunaInfluencer();
+        if ($slug === 'ai-influencer') return $this->showAiInfluencer();
+
+        // 2. Dynamic App
+        $app = \App\Models\App::where('slug', $slug)->where('is_active', true)->with('steps.aiModel.schema')->firstOrFail();
+        
+        return Inertia::render('Apps/DynamicApp', [
+            'app' => $app,
+        ]);
+    }
+
+    /**
+     * Start Dynamic App Execution
+     */
+    public function execute($slug, Request $request)
+    {
+        $app = \App\Models\App::where('slug', $slug)->where('is_active', true)->firstOrFail();
+        
+        // Inputs
+        $inputs = $request->except(['_token']); 
+        
+        // Handle file uploads recursively
+        $handleFiles = function (&$data) use (&$handleFiles) {
+            foreach ($data as $key => &$value) {
+                if ($value instanceof \Illuminate\Http\UploadedFile) {
+                    $path = $value->store('apps/inputs', 's3');
+                    // Use temporary URL with long expiration for background job safety
+                    $value = \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($path, now()->addHours(24));
+                } elseif (is_array($value)) {
+                    $handleFiles($value);
+                }
+            }
+        };
+        $handleFiles($inputs);
+
+        try {
+            $execution = $this->appExecutionService->startApp($app, $request->user(), $inputs);
+            
+            // Dispatch background job
+            \App\Jobs\ProcessAppExecutionJob::dispatch($execution->id);
+
+            return redirect()->back()->with('execution', $execution)->with('message', 'Application started successfully.');
+        } catch (\Exception $e) {
+            Log::error("[AppsController] App Execution Failed: " . $e->getMessage());
+            return redirect()->back()->with('error', $e->getMessage()); 
+        }
+    }
+
+    public function executionStatus(\App\Models\AppExecution $execution)
+    {
+        if ($execution->user_id !== auth()->id()) abort(403);
+        
+        $execution->load('app.steps');
+        return response()->json($execution);
+    }
+
+    public function approve(\App\Models\AppExecution $execution)
+    {
+        if ($execution->user_id !== auth()->id()) abort(403);
+        
+        $this->appExecutionService->approveStep($execution);
+        return back();
+    }
 }

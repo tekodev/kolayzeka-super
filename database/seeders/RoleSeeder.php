@@ -21,7 +21,7 @@ class RoleSeeder extends Seeder
             'email' => 'mehtap@kolayzeka.com',
         ], [
             'name' => 'Mehtap Tekin',
-            'password' => bcrypt('Mt021327.'),
+            'password' => bcrypt('123123'),
             'credit_balance' => 999999,
         ]);
         

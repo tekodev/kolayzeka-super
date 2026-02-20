@@ -104,7 +104,7 @@ class GoogleFileManager
             $response = Http::get($url);
             
             if (!$response->successful()) {
-                Log::error("GoogleFileManager: Failed to download from URL: $url");
+                Log::error("GoogleFileManager: Failed to download from URL: $url - Status: " . $response->status() . " - Body: " . substr($response->body(), 0, 500));
                 return null;
             }
 
