@@ -23,6 +23,7 @@ class AppsController extends Controller
                 'name' => $app->name,
                 'description' => $app->description,
                 'icon' => $app->icon,
+                'image_url' => $app->image_url,
                 'route' => route('apps.show', $app->slug),
             ];
         });
@@ -33,6 +34,7 @@ class AppsController extends Controller
                 'name' => 'Luna Influencer',
                 'description' => 'Create consistent, high-fidelity influencer photos with professional camera controls.',
                 'icon' => 'camera',
+                'image_url' => null,
                 'route' => route('apps.luna-influencer.show'),
             ],
             [
@@ -40,6 +42,7 @@ class AppsController extends Controller
                 'name' => 'AI Influencer',
                 'description' => 'Create custom influencer photos with your own reference images.',
                 'icon' => 'user-group',
+                'image_url' => null,
                 'route' => route('apps.ai-influencer.show'),
             ]
         ]);
@@ -134,21 +137,26 @@ class AppsController extends Controller
         
 
 
+        $clothingRef = $request->file('clothing_reference_images');
+        $clothingRefArray = is_array($clothingRef) ? $clothingRef : ($clothingRef ? [$clothingRef] : []);
+        $identityArray = [
+             [
+                 'file_uri' => $identityFileUri1,
+                 'mime_type' => 'image/jpeg'
+             ],
+             [
+                 'file_uri' => $identityFileUri2,
+                 'mime_type' => 'image/png'
+             ]
+        ];
+
         // Prepare Input Data for GenerationService
         // We inject the File URI structure for BOTH images
         $inputData = [
              'prompt' => $prompt,
-             'identity_reference_images' => [
-                 [
-                     'file_uri' => $identityFileUri1,
-                     'mime_type' => 'image/jpeg'
-                 ],
-                 [
-                     'file_uri' => $identityFileUri2,
-                     'mime_type' => 'image/png'
-                 ]
-             ], 
-             'clothing_reference_images' => $request->file('clothing_reference_images'),
+             'identity_reference_images' => $identityArray,
+             'clothing_reference_images' => $clothingRefArray,
+             'images' => array_merge($identityArray, $clothingRefArray),
         ];
         // Merge other fields
         $inputData = array_merge($request->except(['identity_reference_images', 'clothing_reference_images']), $inputData);
@@ -224,12 +232,19 @@ class AppsController extends Controller
         
 
 
+        $identityRef = $request->file('identity_reference_images');
+        $identityRefArray = is_array($identityRef) ? $identityRef : ($identityRef ? [$identityRef] : []);
+        
+        $clothingRef = $request->file('clothing_reference_images');
+        $clothingRefArray = is_array($clothingRef) ? $clothingRef : ($clothingRef ? [$clothingRef] : []);
+
         // Prepare Input Data for GenerationService
         // Standard flow: Upload files to S3 via GenerationService
         $inputData = [
              'prompt' => $prompt,
-             'identity_reference_images' => $request->file('identity_reference_images'),
-             'clothing_reference_images' => $request->file('clothing_reference_images'),
+             'identity_reference_images' => $identityRefArray,
+             'clothing_reference_images' => $clothingRefArray,
+             'images' => array_merge($identityRefArray, $clothingRefArray),
         ];
         // Merge other fields
         $inputData = array_merge($request->except(['identity_reference_images', 'clothing_reference_images']), $inputData);
@@ -606,6 +621,13 @@ Absolute realism and maximum fidelity to all reference images.";
             }
         };
         $handleFiles($inputs);
+        
+        \Log::info("[AppsController] Incoming inputs before service execution:", [
+             'has_luna_identity' => isset($inputs['luna_identity']),
+             'luna_identity_type' => isset($inputs['luna_identity']) ? gettype($inputs['luna_identity']) : null,
+             'luna_identity_value' => isset($inputs['luna_identity']) && is_string($inputs['luna_identity']) ? $inputs['luna_identity'] : 'not_string',
+             'raw_keys' => array_keys($inputs)
+        ]);
 
         try {
             $execution = $this->appExecutionService->startApp($app, $request->user(), $inputs);
@@ -613,6 +635,7 @@ Absolute realism and maximum fidelity to all reference images.";
             // Dispatch background job
             \App\Jobs\ProcessAppExecutionJob::dispatch($execution->id);
 
+            $execution->prepareUrls();
             return redirect()->back()->with('execution', $execution)->with('message', 'Application started successfully.');
         } catch (\Exception $e) {
             Log::error("[AppsController] App Execution Failed: " . $e->getMessage());
@@ -625,14 +648,38 @@ Absolute realism and maximum fidelity to all reference images.";
         if ($execution->user_id !== auth()->id()) abort(403);
         
         $execution->load('app.steps');
+        $execution->prepareUrls();
         return response()->json($execution);
     }
 
-    public function approve(\App\Models\AppExecution $execution)
+    public function approve(\App\Models\AppExecution $execution, Request $request)
     {
         if ($execution->user_id !== auth()->id()) abort(403);
         
+        // Merge any new inputs provided during approval (Step 2+ inputs)
+        $newInputs = $request->except(['_token']);
+        
+        $handleFiles = function (&$data) use (&$handleFiles) {
+            foreach ($data as $key => &$value) {
+                if ($value instanceof \Illuminate\Http\UploadedFile) {
+                    $path = $value->store('apps/inputs', 's3');
+                    $value = \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl($path, now()->addHours(24));
+                } elseif (is_array($value)) {
+                    $handleFiles($value);
+                }
+            }
+        };
+        $handleFiles($newInputs);
+
+        if (!empty($newInputs)) {
+            $execution->update([
+                'inputs' => array_merge($execution->inputs ?? [], $newInputs)
+            ]);
+        }
+
         $this->appExecutionService->approveStep($execution);
-        return back();
+        
+        $execution->prepareUrls();
+        return back()->with('execution', $execution);
     }
 }

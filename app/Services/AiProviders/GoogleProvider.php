@@ -23,13 +23,6 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
 
         $startTime = microtime(true);
 
-        Log::info("[GoogleProvider] Starting generation", [
-            'model' => $providerModelId, 
-            'payload_keys' => array_keys($payload),
-            'has_ordered_images' => isset($payload['ordered_images']),
-            'ordered_images_count' => isset($payload['ordered_images']) ? count($payload['ordered_images']) : 0
-        ]);
-
         // Retrieve Schema
         $aiModelProvider = \App\Models\AiModelProvider::where('provider_id', $provider->id)
             ->where('provider_model_id', $providerModelId)
@@ -56,14 +49,26 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
         // Replace placeholders & Handle Images
         $base64ToUrlMapping = []; 
         $collectedImages = []; // To store all processed images for auto-append
+        $spreadData = []; // To store raw image data for recursive structural templates
 
-        foreach ($payload as $fieldKey => $value) {
+        foreach ($payload as $fieldKey => &$value) {
             if (!$value) continue;
+            if ($fieldKey === 'ordered_images') continue;
+
+            // Handle nested empty arrays like images: [[]] or images: [null]
+            if (is_array($value) && count($value) === 1 && empty($value[0])) {
+                continue;
+            }
 
             $items = is_array($value) ? $value : [$value];
             $isImageField = false;
+            $processedItems = [];
 
             foreach ($items as $item) {
+                // Flatten deeply nested arrays that might come from frontend misconfiguration
+                if (is_array($item) && isset($item[0])) {
+                    $item = $item[0];
+                }
                 $path = is_array($item) ? ($item['file_uri'] ?? null) : $item;
                 
                 if (is_string($path)) {
@@ -71,13 +76,23 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
                     $isBase64 = false;
                     $mimeType = 'image/jpeg';
 
-                    if (filter_var($path, FILTER_VALIDATE_URL)) {
-                        $parsedPath = parse_url($path, PHP_URL_PATH);
+                    if (filter_var(explode('?', $path)[0], FILTER_VALIDATE_URL)) {
+                        // Clean query params (very important for S3 Temporary URLs)
+                        $cleanUrl = explode('?', $path)[0];
+                        $parsedPath = parse_url($cleanUrl, PHP_URL_PATH);
                         $ext = strtolower(pathinfo($parsedPath, PATHINFO_EXTENSION));
+                        
+                        // If no extension found in URL but we know it's an image input
+                        if (!$ext && str_contains($path, '.s3.')) {
+                            // Basic fallback assuming S3 generation routes often deal in raw jpegs if un-extensioned
+                            $ext = 'jpeg';
+                        }
+
                         if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic'])) {
                             $isImage = true;
                             $mimeType = 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext);
                         }
+
                     } elseif (str_starts_with($path, 'data:image')) {
                         $isImage = true;
                         $isBase64 = true;
@@ -95,31 +110,27 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
                         if ($base64) {
                             $base64ToUrlMapping[$base64] = $isBase64 ? '[BASE64_IMAGE]' : $path;
                             
-                            $imageStructure = $isLongRunning ? [
-                                'mimeType' => $mimeType,
-                                'bytesBase64Encoded' => $base64
-                            ] : [
-                                'inline_data' => [
-                                    'mime_type' => $mimeType,
-                                    'data' => $base64
-                                ]
+                            $spreadData[$fieldKey][] = [
+                                'base64' => $base64,
+                                'mime_type' => $mimeType,
+                                'url' => $path
                             ];
-
-                            $collectedImages[] = $imageStructure;
-
-                            // Handle explicit mapping if placeholder exists
-                            $search = '"{{' . $fieldKey . '}}"';
-                            if (str_contains($jsonBody, $search)) {
-                                $jsonBody = str_replace($search, json_encode($imageStructure), $jsonBody);
-                            }
+                            $processedItems[] = $base64;
                         }
+                    } else {
+                        $processedItems[] = $item;
                     }
+                } else {
+                    $processedItems[] = $item;
                 }
             }
 
-            if (!$isImageField) {
-                // TEXT HANDLING
-                $replaced = false;
+            if ($isImageField && !empty($processedItems)) {
+                $value = is_array($value) ? $processedItems : $processedItems[0];
+            }
+
+            // TEXT HANDLING (Now applies to everything. Images will be base64 strings)
+            $replaced = false;
 
                 // 1. Integer Modifier: "{{key|int}}"
                 $patternInt = '/"\{\{\s*' . preg_quote($fieldKey) . '\|int\s*\}\}"/';
@@ -143,17 +154,11 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
                             }
                             $jsonBody = preg_replace($patternStd, $encodedValue, $jsonBody);
                             $replaced = true;
-                        }
                     }
                 }
             }
         }
         
-        // Cleanup placeholders
-        $jsonBody = preg_replace('/,\s*"(?<!\\\\)\{\{[^}]+\}\}"/', '', $jsonBody); 
-        $jsonBody = preg_replace('/"(?<!\\\\)\{\{[^}]+\}\}"\s*,/', '', $jsonBody);
-        $jsonBody = preg_replace('/"(?<!\\\\)\{\{[^}]+\}\}"/', '""', $jsonBody); 
-
         // Build Google Payload
         $googlePayload = json_decode($jsonBody, true);
 
@@ -164,6 +169,17 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
             ]);
             throw new \Exception("Failed to construct valid JSON payload for Google API.");
         }
+
+        // Structurally expand '__spread__' dynamic array logic
+        $googlePayload = $this->expandSpreads($googlePayload, $spreadData);
+
+        // Clean up unused placeholders (that weren't replaced by payload or spread)
+        // We use array_walk_recursive to avoid running regex on megabytes of Base64 JSON strings.
+        array_walk_recursive($googlePayload, function (&$item) {
+            if (is_string($item) && preg_match('/^\{\{[^}]+\}\}$/', trim($item))) {
+                $item = null;
+            }
+        });
 
         // Veo/predictLongRunning payload must be instances+parameters.
         // If stale templates include Gemini-style fields, normalize here.
@@ -234,15 +250,43 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
         // We MUST preserve this order in the parts array.
         $orderedImagesPayload = $payload['ordered_images'] ?? null;
         if ($orderedImagesPayload && !$isLongRunning) {
-            $parts = [];
+            // 1. Ensure prompt is updated with the templated text
+            $promptText = $payload['prompt'] ?? '';
+            if (isset($googlePayload['contents'][0]['parts'][0]['text'])) {
+                 $googlePayload['contents'][0]['parts'][0]['text'] = $promptText;
+            } else {
+                 array_unshift($googlePayload['contents'][0]['parts'], ['text' => $promptText]);
+            }
+
+            // Clear any automatically expanded images (like __spread__) from the parts array
+            $googlePayload['contents'][0]['parts'] = array_filter(
+                $googlePayload['contents'][0]['parts'], 
+                fn($p) => isset($p['text']) || isset($p['video'])
+            );
             
-            // Part 0: The prompt (with [image_N] placeholders already replaced)
-            $promptText = $googlePayload['contents'][0]['parts'][0]['text'] ?? $payload['prompt'] ?? '';
-            $parts[] = ['text' => $promptText];
-            
+            // 3. Append the ordered images
             foreach ($orderedImagesPayload as $img) {
-                $url = $img['file_uri'];
-                $mimeType = $img['mime_type'];
+                if (is_string($img)) {
+                    $url = $img;
+                    $cleanUrl = explode('?', $url)[0];
+                    $parsedPath = parse_url($cleanUrl, PHP_URL_PATH);
+                    $ext = strtolower(pathinfo($parsedPath, PATHINFO_EXTENSION));
+                    
+                    if (!$ext && str_contains($url, '.s3.')) $ext = 'jpeg';
+                    
+                    $mimeType = 'image/jpeg';
+                    if (in_array($ext, ['png', 'webp', 'heic'])) {
+                         $mimeType = 'image/' . $ext;
+                    }
+                } else {
+                    $url = $img['file_uri'] ?? null;
+                    $mimeType = $img['mime_type'] ?? 'image/jpeg';
+                }
+
+                if (!$url) {
+                     Log::warning("[GoogleProvider] Skipping ordered image due to missing URL.");
+                     continue;
+                }
                 
                 /** @var \App\Services\MediaService $mediaService */
                 $mediaService = app(\App\Services\MediaService::class);
@@ -252,12 +296,12 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
                     $base64ToUrlMapping[$base64] = $url;
                     
                     if ($isLongRunning) {
-                        $parts[] = [
+                        $googlePayload['contents'][0]['parts'][] = [
                             'mimeType' => $mimeType,
                             'bytesBase64Encoded' => $base64
                         ];
                     } else {
-                        $parts[] = [
+                        $googlePayload['contents'][0]['parts'][] = [
                             'inline_data' => [
                                 'mime_type' => $mimeType,
                                 'data' => $base64
@@ -268,8 +312,8 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
                     Log::warning("[GoogleProvider] Failed to convert URL to Base64: {$url}");
                 }
             }
-            $googlePayload['contents'][0]['parts'] = $parts;
-            Log::info("[GoogleProvider] Payload constructed using ORDERED IMAGES. Parts count: " . count($parts));
+            // Re-index array
+            $googlePayload['contents'][0]['parts'] = array_values($googlePayload['contents'][0]['parts']);
         } 
         else {
             // Standard Part Filtering & Auto-Append (Fallback for direct API calls)
@@ -294,6 +338,8 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
             }
         }
 
+        // --- Execute Request ---
+        
         // API Endpoint Logic
         $endpointAction = $isLongRunning ? 'predictLongRunning' : 'generateContent';
         $baseUrl = $this->provider->base_url ?? 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -396,21 +442,10 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
                 
                 // Generate thumbnail from same Base64 data
                 $thumbnailUrl = $mediaService->generateThumbnail($extractedData, 300, 60);
-                
-                Log::info('[GoogleProvider] Successfully uploaded generated image to S3', [
-                    'url' => $s3Url,
-                    'has_thumbnail' => !empty($thumbnailUrl)
-                ]);
             } else {
                 Log::error('[GoogleProvider] Failed to upload generated image to S3');
             }
         }
-        
-        Log::info('Google Gemini execution completed', [
-            'duration' => $duration,
-            'has_result' => !empty($finalResult),
-            'result_type' => is_string($finalResult) && filter_var($finalResult, FILTER_VALIDATE_URL) ? 'url' : 'other',
-        ]);
 
         // Create a sanitized version of request body for DB storage (replace Base64 with S3 URLs)
         // Deep copy to avoid modifying original
@@ -567,5 +602,59 @@ class GoogleProvider implements AiProviderInterface, AsyncAiProviderInterface
     public function downloadResult(string $url): string
     {
         return $this->downloadVideo($url);
+    }
+
+    /**
+     * Recursively expands {"__spread__": "key", "template": {...}} directives 
+     * by injecting the template for each item in $spreadData['key'].
+     */
+    protected function expandSpreads(array $payload, array $spreadData): array
+    {
+        $result = [];
+        // Check if sequential or associative. If it's a list (like 'parts'), we splice spread items into it.
+        $isSequential = array_keys($payload) === range(0, count($payload) - 1);
+
+        foreach ($payload as $key => $value) {
+            if (is_array($value)) {
+                if (isset($value['__spread__']) && isset($value['template'])) {
+                    $fieldKey = $value['__spread__'];
+                    $templateObj = $value['template'];
+                    
+                    $items = $spreadData[$fieldKey] ?? [];
+                    $templateJson = json_encode($templateObj);
+
+                    foreach ($items as $item) {
+                        $itemStr = $templateJson;
+                        $itemStr = str_replace('{{base64}}', $item['base64'] ?? '', $itemStr);
+                        $itemStr = str_replace('{{mime_type}}', $item['mime_type'] ?? '', $itemStr);
+                        $itemStr = str_replace('{{url}}', $item['url'] ?? '', $itemStr);
+                        
+                        $decodedItem = json_decode($itemStr, true);
+                        if ($isSequential) {
+                            $result[] = $decodedItem;
+                        } else {
+                            // Rare case: spreading inside an associative array, just assign sequentially or overwrite?
+                            // Usually this is meant for sequential arrays like 'parts'.
+                            $result[$key] = $decodedItem; 
+                        }
+                    }
+                } else {
+                    $processed = $this->expandSpreads($value, $spreadData);
+                    if ($isSequential) {
+                        $result[] = $processed;
+                    } else {
+                        $result[$key] = $processed;
+                    }
+                }
+            } else {
+                if ($isSequential) {
+                    $result[] = $value;
+                } else {
+                    $result[$key] = $value;
+                }
+            }
+        }
+
+        return $result;
     }
 }

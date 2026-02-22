@@ -36,6 +36,11 @@ class AppResource extends Resource
                             ->columnSpanFull(),
                         Forms\Components\TextInput::make('icon')
                             ->default('heroicon-o-cube'),
+                        Forms\Components\FileUpload::make('image_url')
+                            ->image()
+                            ->directory('apps/images')
+                            ->label('App Image')
+                            ->columnSpanFull(),
                         Forms\Components\TextInput::make('cost_multiplier')
                             ->numeric()
                             ->default(1.00),
@@ -128,6 +133,27 @@ class AppResource extends Resource
                                         if (!$model || !$model->schema) return [];
 
                                         $schema = $model->schema->input_schema ?? [];
+                                        
+                                        // Merge image fields from UI Schema to allow independent configuration
+                                        $uiSchemaState = $get('ui_schema');
+                                        if (is_string($uiSchemaState)) {
+                                            $uiSchemaDecoded = json_decode($uiSchemaState, true);
+                                            if (json_last_error() === JSON_ERROR_NONE && is_array($uiSchemaDecoded)) {
+                                                foreach ($uiSchemaDecoded as $uiField) {
+                                                    $uiKey = $uiField['key'] ?? null;
+                                                    $uiType = $uiField['type'] ?? 'text';
+                                                    
+                                                    if ($uiKey && in_array($uiType, ['image', 'images'])) {
+                                                        // Only add if not already in the base schema
+                                                        $exists = collect($schema)->contains('key', $uiKey);
+                                                        if (!$exists) {
+                                                            $schema[] = $uiField;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         $components = [];
 
                                         foreach ($schema as $field) {
@@ -148,6 +174,7 @@ class AppResource extends Resource
                                                                 'static' => 'Static Value',
                                                                 'previous' => 'Previous Step Output',
                                                                 'template' => 'Prompt Template (Merged)',
+                                                                'merge_arrays' => 'Merge Inputs into Array',
                                                             ])
                                                             ->default('user')
                                                             ->live()
@@ -179,8 +206,9 @@ class AppResource extends Resource
                                                             ->label($source === 'static' ? "Static Image/File" : "Default Image (Optional)")
                                                             ->disk('public')
                                                             ->directory('app_static_assets')
-                                                            ->multiple(in_array($type, ['images', 'files']))
+                                                            ->multiple(true) // Always allow multiple for robust defaults
                                                             ->image(in_array($type, ['image', 'images']))
+                                                            ->maxSize(102400) // Increase max upload size to 100MB
                                                             ->required($source === 'static');
                                                     } elseif ($options && in_array($source, ['static', 'user'])) {
                                                         // Use Select for fields with options
@@ -207,6 +235,14 @@ class AppResource extends Resource
                                                          ->placeholder("result_url")
                                                          ->visible(fn (Forms\Get $get) => $get("source") === 'previous');
 
+                                                    $fields[] = Forms\Components\TagsInput::make("merge_keys")
+                                                         ->label("Keys to Merge")
+                                                         ->placeholder("Type key and press Enter or Comma")
+                                                         ->helperText("Add your keys like: luna_identity, luna_clothing (press Enter or Comma after each)")
+                                                         ->default([])
+                                                         ->splitKeys(['Tab', ' ', ','])
+                                                         ->visible(fn (Forms\Get $get) => $get("source") === 'merge_arrays');
+
                                                     return $fields;
                                                 })
                                                 ->statePath("config.{$key}")
@@ -228,6 +264,8 @@ class AppResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\ImageColumn::make('image_url')
+                    ->label('Image'),
                 Tables\Columns\TextColumn::make('name')->searchable(),
                 Tables\Columns\TextColumn::make('slug'),
                 Tables\Columns\TextColumn::make('cost_multiplier')->numeric(),

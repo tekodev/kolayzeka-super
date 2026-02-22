@@ -125,6 +125,30 @@ class FalAiProvider implements AiProviderInterface
              throw new \Exception('Fal.ai returned no content (Path: ' . $responsePath . ')');
         }
 
+        // Handle case where path resolves to an array of images/objects
+        if (is_array($outputUrl)) {
+            Log::info("[FalAiProvider] Output URL is an array, formatting as array of URLs.");
+            
+            $formattedUrls = [];
+            foreach ($outputUrl as $item) {
+                if (is_array($item) && isset($item['url'])) {
+                    $formattedUrls[] = $item['url'];
+                } elseif (is_string($item)) {
+                    $formattedUrls[] = $item;
+                }
+            }
+            
+            if (!empty($formattedUrls)) {
+                // If there's only 1, unwrap it (optional, but requested by user to see all, so let's keep array if originally array, or if multiple)
+                // Actually, if they want to see "all of them if multiple", we should always pass array if there's multiple.
+                $outputUrl = count($formattedUrls) === 1 ? $formattedUrls[0] : $formattedUrls;
+                Log::info("[FalAiProvider] Successfully formatted URLs from array.", ['count' => count($formattedUrls)]);
+            } else {
+                Log::warning("[FalAiProvider] Could not extract string URLs from array. Encoding as JSON.");
+                $outputUrl = empty($outputUrl) ? null : json_encode($outputUrl);
+            }
+        }
+
         return [
             'output' => [
                 'result' => $outputUrl,

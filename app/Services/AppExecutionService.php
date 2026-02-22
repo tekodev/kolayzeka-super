@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Generation;
 use App\Models\AppExecution;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class AppExecutionService
 {
@@ -106,7 +107,17 @@ class AppExecutionService
 
         } catch (\Exception $e) {
             Log::error("[AppExecution] Step Failed: " . $e->getMessage());
-            $execution->update(['status' => 'failed']);
+            $history = $execution->history ?? [];
+            $history[$execution->current_step] = [
+                'status' => 'failed', 
+                'error_message' => $e->getMessage()
+            ];
+            $history['error_message'] = $e->getMessage();
+            
+            $execution->update([
+                'status' => 'failed',
+                'history' => $history
+            ]);
             \App\Events\AppExecutionCompleted::dispatch($execution);
         }
     }
@@ -165,8 +176,15 @@ class AppExecutionService
             } 
             elseif ($source === 'user') {
                 $inputKey = $fieldConfig['input_key'] ?? $key;
-                $resolved[$key] = $context['inputs'][$inputKey] ?? null;
-            } 
+                $val = $context['inputs'][$inputKey] ?? null;
+                
+                // Fallback to the default value/image uploaded via Filament panel if frontend didn't provide one
+                if (empty($val) && isset($fieldConfig['value'])) {
+                    $val = $fieldConfig['value'];
+                }
+                
+                $resolved[$key] = $val;
+            }
             elseif ($source === 'previous') {
                 $stepIndex = $fieldConfig['step_index'] ?? null;
                 $outputKey = $fieldConfig['output_key'] ?? 'result'; 
@@ -178,6 +196,69 @@ class AppExecutionService
                     Log::warning("[AppExecution] Missing history for step {$stepIndex}");
                     $resolved[$key] = null;
                 }
+            }
+            elseif ($source === 'merge_arrays') {
+                $mergeKeysRaw = $fieldConfig['merge_keys'] ?? [];
+                $mergeKeys = is_string($mergeKeysRaw) ? json_decode($mergeKeysRaw, true) : $mergeKeysRaw;
+                if (!is_array($mergeKeys)) {
+                    $mergeKeys = $mergeKeysRaw ? [$mergeKeysRaw] : [];
+                }
+                
+                $mergedArray = [];
+
+                // 1. Include static default values if uploaded via panel
+                $staticVal = $fieldConfig['value'] ?? null;
+                if ($staticVal) {
+                    if (is_string($staticVal) && (str_starts_with($staticVal, '[') || str_starts_with($staticVal, '{'))) {
+                        $decoded = json_decode($staticVal, true);
+                        if (json_last_error() === JSON_ERROR_NONE) {
+                            $staticVal = $decoded;
+                        }
+                    }
+                    if (is_array($staticVal)) {
+                        $mergedArray = array_merge($mergedArray, $staticVal);
+                    } else {
+                        $mergedArray[] = $staticVal;
+                    }
+                }
+
+                // 2. Merge dynamic UI inputs
+                foreach ($mergeKeys as $mKey) {
+                    $val = $context['inputs'][$mKey] ?? null;
+                    
+                    // Fallback to default value from config if user didn't provide input
+                    if (empty($val) && isset($config[$mKey]['value'])) {
+                        $val = $config[$mKey]['value'];
+                        // Decode if stringified JSON
+                        if (is_string($val) && (str_starts_with($val, '[') || str_starts_with($val, '{'))) {
+                            $decoded = json_decode($val, true);
+                            if (json_last_error() === JSON_ERROR_NONE) {
+                                $val = $decoded;
+                            }
+                        }
+                    }
+
+                    if ($val) {
+                        if (is_array($val)) {
+                            // Recursively flatten arrays and filter out empty items (like nested [[]])
+                            array_walk_recursive($val, function ($v) use (&$mergedArray) {
+                                if ($v !== null && $v !== '') {
+                                    $mergedArray[] = $v;
+                                }
+                            });
+                        } else {
+                            $mergedArray[] = $val;
+                        }
+                    }
+                }
+                
+                // Final sanity check: remove any completely empty values that squeaked through
+                $mergedArray = array_values(array_filter($mergedArray, function($item) {
+                     return !empty($item) || (is_numeric($item) && $item == 0);
+                }));
+                
+                // Only set if we actually merged something, otherwise leave null or empty
+                $resolved[$key] = !empty($mergedArray) ? $mergedArray : null;
             }
         }
 
@@ -215,24 +296,7 @@ class AppExecutionService
                 }
             }
 
-            // Luna step fallback: preserve built-in identity references even if config was truncated.
-            if (in_array('identity_reference_images', $templateTokens, true) && !isset($resolved['identity_reference_images'])) {
-                $defaultIdentityPaths = [
-                    'app_static_assets/luna_identity.jpg',
-                    'app_static_assets/luna_face.png',
-                ];
 
-                $availableIdentityPaths = array_values(array_filter($defaultIdentityPaths, function ($path) {
-                    return file_exists(storage_path('app/public/' . $path));
-                }));
-
-                if (!empty($availableIdentityPaths)) {
-                    $resolved['identity_reference_images'] = $availableIdentityPaths;
-                    Log::info('[AppExecution] Applied fallback identity_reference_images from static assets.', [
-                        'count' => count($availableIdentityPaths),
-                    ]);
-                }
-            }
         }
         
         Log::info("[AppExecution] Step {$step->order} resolved raw inputs", [
@@ -252,10 +316,52 @@ class AppExecutionService
                 $path = is_array($item) ? ($item['file_uri'] ?? null) : $item;
                 
                 if (is_string($path) && str_starts_with($path, 'app_static_assets/')) {
+                    try {
+                        // 1. Check if S3 already has this file
+                        if (Storage::disk('s3')->exists($path)) {
+                            $url = Storage::disk('s3')->temporaryUrl($path, now()->addHours(24));
+                            Log::info("[AppExecution] Resolved static asset path from S3: {$url}");
+                            
+                            if (is_array($item)) {
+                                $item['file_uri'] = $url;
+                                $resolvedItems[] = $item;
+                            } else {
+                                $resolvedItems[] = $url;
+                            }
+                            continue;
+                        }
+
+                        // 2. Not in S3? Try to upload the local copy to S3 lazily
+                        $fullPath = storage_path('app/public/' . $path);
+                        if (file_exists($fullPath)) {
+                            Storage::disk('s3')->put($path, file_get_contents($fullPath));
+                            $url = Storage::disk('s3')->temporaryUrl($path, now()->addHours(24));
+                            Log::info("[AppExecution] Lazy uploaded static asset to S3: {$url}");
+                            
+                            if (is_array($item)) {
+                                $item['file_uri'] = $url;
+                                $resolvedItems[] = $item;
+                            } else {
+                                $resolvedItems[] = $url;
+                            }
+                            continue;
+                        }
+                    } catch (\Exception $e) {
+                        Log::warning("[AppExecution] S3 operation failed for {$path}, falling back to Base64. Error: " . $e->getMessage());
+                    }
+
+                    // 3. Ultimate Fallback: Base64 or Local Asset URL
                     $fullPath = storage_path('app/public/' . $path);
                     if (file_exists($fullPath)) {
-                        $url = asset('storage/' . $path);
-                        Log::info("[AppExecution] Resolved static asset path to URL: {$url}");
+                        try {
+                            // Prefer Base64 so external APIs (Fal.ai, etc) can access it instead of localhost
+                            $mime = mime_content_type($fullPath);
+                            $b64 = base64_encode(file_get_contents($fullPath));
+                            $url = "data:{$mime};base64,{$b64}";
+                            Log::info("[AppExecution] Resolved static asset path to Base64 Data URI");
+                        } catch (\Exception $e) {
+                            $url = asset('storage/' . $path);
+                        }
                         
                         if (is_array($item)) {
                             $item['file_uri'] = $url;
@@ -265,7 +371,7 @@ class AppExecutionService
                         }
                         continue;
                     } else {
-                        Log::warning("[AppExecution] Static asset not found: {$fullPath}");
+                        Log::warning("[AppExecution] Static asset not found: {$path}");
                     }
                 }
                 $resolvedItems[] = $item;
@@ -275,36 +381,40 @@ class AppExecutionService
         }
         unset($value); 
 
-        // 3. Gemini Identity Indexing ([image_1], [image_2]...)
+        // 3. Image Indexing ([image_1], [image_2]...) for Prompt Referencing
         $allImages = [];
         $imageMapping = []; // key => [index1, index2]
 
-        if ($isGoogleModel) {
-            // Priority 1: Static Fields (Identity)
-            foreach ($config as $key => $fieldConfig) {
-                if (($fieldConfig['source'] ?? '') === 'static' && isset($resolved[$key])) {
-                    $this->mapImages($key, $resolved[$key], $allImages, $imageMapping);
-                }
-            }
-            // Priority 2: User/Previous Fields
-            foreach ($config as $key => $fieldConfig) {
-                if (($fieldConfig['source'] ?? '') !== 'static' && isset($resolved[$key])) {
-                    $this->mapImages($key, $resolved[$key], $allImages, $imageMapping);
-                }
-            }
+        // Priority 1: Static Fields OR fields with "identity" in name
+        foreach ($config as $key => $fieldConfig) {
+            $isStatic = ($fieldConfig['source'] ?? '') === 'static';
+            $isIdentity = str_contains(strtolower($key), 'identity');
             
-            Log::info("[AppExecution] Gemini indexing complete", [
-                'ordered_images_count' => count($allImages),
-                'image_mapping' => $imageMapping
-            ]);
+            if (($isStatic || $isIdentity) && isset($resolved[$key])) {
+                $this->mapImages($key, $resolved[$key], $allImages, $imageMapping);
+            }
         }
+        // Priority 2: User/Previous Fields (excluding identity)
+        foreach ($config as $key => $fieldConfig) {
+            $isStatic = ($fieldConfig['source'] ?? '') === 'static';
+            $isIdentity = str_contains(strtolower($key), 'identity');
+            
+            if ((!$isStatic && !$isIdentity) && isset($resolved[$key])) {
+                $this->mapImages($key, $resolved[$key], $allImages, $imageMapping);
+            }
+        }
+        
+        Log::info("[AppExecution] Image indexing complete", [
+            'ordered_images_count' => count($allImages),
+            'image_mapping' => $imageMapping
+        ]);
 
         // 4. Handle Prompt Template
         if ($step->prompt_template) {
             $mergedPrompt = $step->prompt_template;
 
             foreach ($resolved as $key => $value) {
-                if ($isGoogleModel && isset($imageMapping[$key])) {
+                if (isset($imageMapping[$key])) {
                     // Replace {key} with [image_1, image_2]
                     $indices = array_map(fn($idx) => "[image_{$idx}]", $imageMapping[$key]);
                     $replacement = implode(', ', $indices);
@@ -324,7 +434,7 @@ class AppExecutionService
             Log::info("[AppExecution] Prompt templating complete. Prompt length: " . strlen($mergedPrompt));
         }
 
-        if ($isGoogleModel && !empty($allImages)) {
+        if (!empty($allImages)) {
             $resolved['ordered_images'] = $allImages;
         }
 

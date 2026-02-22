@@ -56,12 +56,15 @@ class MediaService
                 if (str_starts_with($path, '/storage/')) {
                     $relativePath = str_replace('/storage/', '', $path);
                     if (Storage::disk('public')->exists($relativePath)) {
-                        Log::info("[MediaService] Resolved local URL to filesystem: {$path}");
+                        Log::info("[MediaService] Resolved local URL to filesystem: {$relativePath}");
                         return base64_encode(Storage::disk('public')->get($relativePath));
+                    } else {
+                        Log::warning("[MediaService] Local file not found in public disk: {$relativePath}");
                     }
                 }
             }
 
+            Log::info("[MediaService] Attempting HTTP GET for Base64: {$url}");
             $response = Http::timeout(120)->get($url);
             
             if ($response->successful()) {

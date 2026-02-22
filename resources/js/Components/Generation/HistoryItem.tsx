@@ -15,6 +15,7 @@ interface Generation {
         thumbnail?: string;
         [key: string]: any;
     }; 
+    thumbnail_url?: string; 
     user_credit_cost: number;
 }
 
@@ -63,10 +64,13 @@ export default function HistoryItem({ generation }: HistoryItemProps) {
                     </span>
 
                     {/* Thumbnail Logic */}
-                    {generation.status === 'completed' && generation.output_data?.thumbnail ? (
-                        <div className="relative group cursor-pointer" onClick={() => window.open(generation.output_data.result, '_blank')}>
+                    {generation.status === 'completed' && (generation.thumbnail_url || generation.output_data?.thumbnail) ? (
+                        <div className="relative group cursor-pointer" onClick={() => {
+                            const url = Array.isArray(generation.output_data.result) ? generation.output_data.result[0] : (generation.output_data.result as string)
+                            window.open(url, '_blank')
+                        }}>
                             <img 
-                                src={generation.output_data.thumbnail} 
+                                src={generation.thumbnail_url || generation.output_data?.thumbnail} 
                                 alt="Generated Thumbnail" 
                                 className="w-24 h-24 object-cover rounded-lg border border-gray-200 shadow-sm transition-transform hover:scale-105"
                             />
@@ -96,7 +100,7 @@ export default function HistoryItem({ generation }: HistoryItemProps) {
             </div>
 
             {/* Expanded Content (Only for non-thumbnail items or detailed view if needed) */}
-            {expanded && !generation.output_data?.thumbnail && (
+            {expanded && !(generation.thumbnail_url || generation.output_data?.thumbnail) && (
                 <div className="mt-4 animate-fade-in-down">
                     <ResultDisplay generation={generation} />
                 </div>

@@ -200,8 +200,16 @@ class ProvidersRelationManager extends RelationManager
                                         }
 
                                         // 3. Set Values
-                                        $set('../../input_schema', $inputSchema); 
-                                        $set('../../field_mapping', $fieldMapping);
+                                        // Textarea components require string state. Since we're bypassing the DB loading cycle, 
+                                        // formatStateUsing won't automatically convert arrays to strings here. We must encode them.
+                                        $inputSchemaJson = json_encode($inputSchema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+                                        $fieldMappingJson = json_encode($fieldMapping, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+                                        // Try relative to relationship, and absolute root
+                                        $set('../../input_schema', $inputSchemaJson);
+                                        $set('input_schema', $inputSchemaJson);
+                                        $set('../../field_mapping', $fieldMappingJson);
+                                        $set('field_mapping', $fieldMappingJson);
 
                                         \Filament\Notifications\Notification::make()
                                             ->title('Schema Generated')

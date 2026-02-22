@@ -108,20 +108,35 @@ class SchemaGeneratorService
                 $schemaItem['description'] = $description;
             }
 
-            // Handle Enum/Select
+            // Handle Enum/Select (Direct or AnyOf)
+            $enumOptions = null;
             if (isset($prop['enum'])) {
+                $enumOptions = $prop['enum'];
+            } elseif (isset($prop['anyOf'])) {
+                foreach ($prop['anyOf'] as $anyOfItem) {
+                    if (isset($anyOfItem['enum'])) {
+                        $enumOptions = $anyOfItem['enum'];
+                        break;
+                    }
+                }
+            }
+
+            if ($enumOptions !== null) {
                 $schemaItem['type'] = 'select';
                 $schemaItem['options'] = array_map(function($val) {
-                    return ['label' => ucfirst($val), 'value' => $val];
-                }, $prop['enum']);
+                    return ['label' => ucfirst(str_replace('_', ' ', $val)), 'value' => $val];
+                }, $enumOptions);
             }
             
-            // Handle x-order or sorting if available (optional enhancement)
-
             // Handle Number ranges
             if ($type === 'number') {
                 if (isset($prop['minimum'])) $schemaItem['min'] = $prop['minimum'];
                 if (isset($prop['maximum'])) $schemaItem['max'] = $prop['maximum'];
+            }
+
+            // Fix for 'image_urls' type (array of images)
+            if (isset($prop['type']) && $prop['type'] === 'array' && str_contains(strtolower($key), 'image')) {
+                $schemaItem['type'] = 'images';
             }
 
             $clientSchema[] = $schemaItem;
@@ -251,9 +266,10 @@ class SchemaGeneratorService
             return 'toggle';
         }
         if (str_contains(strtolower($key), 'image')) {
-            return 'image';
+            // Check if plural "images" or "urls", return `images` or `image`
+            return str_ends_with(strtolower($key), 'images') || str_ends_with(strtolower($key), 'urls') ? 'images' : 'image';
         }
-        if (str_contains(strtolower($key), 'prompt') && $providerType === 'string') {
+        if (str_contains(strtolower($key), 'prompt') && ($providerType === 'string' || $providerType === 'textarea')) {
             return 'textarea';
         }
         return 'text';

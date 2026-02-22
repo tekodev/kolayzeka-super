@@ -27,7 +27,8 @@ class GenerationController extends Controller
                 'created_at', 
                 'output_data', 
                 'user_credit_cost', 
-                'error_message'
+                'error_message',
+                'thumbnail_url'
             ])
             ->with(['aiModel' => function($q) {
                 $q->select(['id', 'name', 'image_url'])->with('categories');
@@ -69,19 +70,23 @@ class GenerationController extends Controller
             'input_data' => 'required|array',
         ]);
         
-        // Handle file uploads in input_data explicitly
+        // Handle file uploads in input_data explicitly (support nested arrays like 'images')
         $inputData = $validated['input_data'];
-        foreach ($inputData as $key => $value) {
-            if ($value instanceof \Illuminate\Http\UploadedFile) {
-                try {
-                     $path = $value->store('generations/inputs', 's3');
-                     $url = Storage::disk('s3')->url($path);
-                     $inputData[$key] = $url;
-                } catch (\Exception $e) {
-                     Log::error("[GenerationController] Failed to upload file for key {$key}: " . $e->getMessage());
+        $handleFiles = function (&$data) use (&$handleFiles) {
+            foreach ($data as $key => &$value) {
+                if ($value instanceof \Illuminate\Http\UploadedFile) {
+                    try {
+                         $path = $value->store('generations/inputs', 's3');
+                         $value = Storage::disk('s3')->url($path);
+                    } catch (\Exception $e) {
+                         Log::error("[GenerationController] Failed to upload file for key {$key}: " . $e->getMessage());
+                    }
+                } elseif (is_array($value)) {
+                    $handleFiles($value);
                 }
             }
-        }
+        };
+        $handleFiles($inputData);
         $validated['input_data'] = $inputData;
 
         $model = AiModel::with('primaryProvider')->findOrFail($request->ai_model_id);

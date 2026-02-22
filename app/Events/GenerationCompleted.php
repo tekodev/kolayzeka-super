@@ -21,7 +21,7 @@ class GenerationCompleted implements ShouldBroadcast
     public function __construct(
         public Generation $generation,
         public int $userId,
-        public ?string $resultUrl = null
+        public array|string|null $resultUrl = null
     ) {
         // Fallback: If no resultUrl passed but model has it, prepare it
         if (!$this->resultUrl) {

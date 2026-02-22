@@ -18,13 +18,7 @@ Route::get('/', function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('/dashboard', function () {
-        return Inertia::render('Dashboard', [
-            'aiModels' => \App\Models\AiModel::with(['providers' => function($q) {
-                 $q->where('is_primary', true)->with(['schema', 'provider']);
-            }])->where('is_active', true)->get()
-        ]);
-    })->name('dashboard');
+
 
     Route::get('/models', [AiModelController::class, 'index'])->name('models.index');
     Route::get('/models/{slug}', [AiModelController::class, 'show'])->name('models.show');

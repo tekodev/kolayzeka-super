@@ -78,7 +78,7 @@ export default function Show({ aiModel, auth, flash, initialData, repromptResult
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                         </svg>
                     </Link>
-                    <h2 className="text-xl font-semibold leading-tight text-gray-800">
+                    <h2 className="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
                         {aiModel.name}
                     </h2>
                 </div>
@@ -86,77 +86,78 @@ export default function Show({ aiModel, auth, flash, initialData, repromptResult
         >
             <Head title={aiModel.name} />
 
-            <div className="py-12">
-                <div className="mx-auto max-w-7xl sm:px-6 lg:px-8">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        
-                        {/* Sidebar: Model Info & Description */}
-                        <div className="space-y-6">
-                            <div className="bg-white overflow-hidden shadow-sm sm:rounded-2xl border border-gray-100 p-8">
-                                <div className="aspect-square w-full rounded-xl overflow-hidden mb-6 bg-gray-50">
-                                    {aiModel.image_url ? (
-                                        <img src={aiModel.image_url.startsWith('http') ? aiModel.image_url : `/storage/${aiModel.image_url}`} className="w-full h-full object-cover" alt="" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                            <svg className="w-20 h-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                            </svg>
-                                        </div>
-                                    )}
-                                </div>
-                                <h3 className="text-xl font-bold text-gray-900 uppercase tracking-tight">{aiModel.name}</h3>
-                                <p className="text-indigo-600 text-sm font-bold mt-1">{aiModel.category}</p>
-                                <p className="mt-4 text-gray-600 text-sm leading-relaxed">
-                                    {aiModel.description}
-                                </p>
-                                
-                                <div className="mt-8 pt-8 border-t border-gray-100 space-y-4">
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-gray-500">Provider</span>
-                                        <span className="font-bold text-gray-900">{provider?.provider?.name || 'Custom'}</span>
+            <div>
+                {/* Full Width Model Info Header */}
+                    <div className="relative h-[350px] md:h-[300px] w-full overflow-hidden">
+                        {aiModel.image_url ? (
+                        <img
+                            src={aiModel.image_url.startsWith('http') ? aiModel.image_url : `/storage/${aiModel.image_url}`}
+                            alt={aiModel.name}
+                            className="absolute inset-0 w-full h-full object-cover brightness-50 dark:brightness-30"
+                        />
+                        ) : (
+                            <div className='absolute inset-0 w-full h-full bg-gray-900 dark:bg-black'></div>
+                        )}
+                            <div className="absolute inset-0 h-full flex items-center justify-start">
+                            <div className="container mx-auto px-4 md:px-8 mt-6 md:mt-10 max-w-7xl flex items-center justify-between">
+                                <div className="text-start">
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-3 md:mb-4">
+                                        <h1 className="text-lg md:text-3xl font-bold text-white">{aiModel.name}</h1>
                                     </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-500">Your Credits</span>
-                                        <span className="text-lg font-black text-green-600">{user.credit_balance}</span>
+                                    <p className="text-xs md:text-sm lg:text-base text-white/90 mb-4 max-w-2xl leading-relaxed">
+                                        {aiModel.description}
+                                    </p>
+                                    <div className='flex gap-2 flex-wrap'>
+                                        {aiModel.categories?.map((category: any) => (
+                                            <span key={category.id} className="px-2 py-1 md:px-3 md:py-1 text-xs rounded-full bg-indigo-100/20 dark:bg-indigo-900/40 text-indigo-100 border border-indigo-200/20 backdrop-blur-md">
+                                                {category.name}
+                                            </span>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Main Content: Form & Result */}
-                        <div className="lg:col-span-2 space-y-8">
+                {/* Main Content Area (Form & Result) */}
+                <div className="pt-8 px-4 sm:px-6 lg:px-8 pb-16">
+                    <div className="mx-auto max-w-7xl">
+                        <div className="grid md:grid-cols-2 gap-6 lg:gap-8 align-top">
                             
-                            {/* Generation Form */}
-                            <div className="bg-white shadow-sm sm:rounded-2xl border border-gray-100 overflow-hidden">
-                                <div className="flex border-b border-gray-50 bg-gray-50/30">
-                                    <button className="px-8 py-4 text-sm font-black uppercase tracking-widest text-indigo-600 border-b-2 border-indigo-600 bg-white">
-                                        Configuration
-                                    </button>
-                                    <Link 
-                                        href={route('models.docs', aiModel.slug)}
-                                        className="px-8 py-4 text-sm font-bold uppercase tracking-widest text-gray-400 hover:text-indigo-600 hover:bg-gray-50 transition-all"
-                                    >
-                                        Documentation
-                                    </Link>
-                                </div>
-                                <div className="p-8">
-                                    <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                            {/* Left Column: Form */}
+                            <div className="rounded-2xl max-h-[calc(100vh-100px)] overflow-y-auto border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-6 lg:px-8 lg:py-8 flex flex-col">
+                                <div className="flex items-center justify-between mb-6 border-b border-gray-50 dark:border-gray-700 pb-4">
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                         <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                                         </svg>
-                                        Settings
-                                    </h3>
+                                        Configuration
+                                    </h2>
+                                    <div className="flex items-center gap-4">
+                                        <Link 
+                                            href={route('models.docs', aiModel.slug)}
+                                            className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-indigo-600 transition-all"
+                                        >
+                                            Docs
+                                        </Link>
+                                        <span className="px-3 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium">
+                                            {provider?.provider?.name || 'Custom'}
+                                        </span>
+                                    </div>
+                                </div>
 
-                                <form onSubmit={submit} className="space-y-8">
-                                    <DynamicForm 
-                                        schema={schema}
-                                        data={data.input_data}
-                                        errors={errors as any}
-                                        setData={(key, val) => handleInputChange(key, val)}
-                                    />
+                                <form onSubmit={submit} className="flex flex-col flex-grow">
+                                    <div className="flex-grow space-y-6">
+                                        <DynamicForm 
+                                            schema={schema}
+                                            data={data.input_data}
+                                            errors={errors as any}
+                                            setData={(key, val) => handleInputChange(key, val)}
+                                        />
+                                    </div>
 
-                                    <div className="pt-6 border-t border-gray-50">
-                                        <PrimaryButton disabled={processing} className="w-full justify-center py-4 text-lg font-bold tracking-wide rounded-2xl shadow-lg shadow-indigo-100 h-14 uppercase">
+                                    <div className="sticky md:bottom-2 bottom-5 mt-8 pt-6 border-t border-gray-50 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm z-10">
+                                        <PrimaryButton disabled={processing} className="w-full justify-center py-4 text-lg font-bold tracking-wide rounded-2xl shadow-lg shadow-indigo-100 h-14 uppercase transition-all hover:scale-[1.02]">
                                             {processing ? (
                                                 <span className="flex items-center gap-2">
                                                     <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -172,19 +173,29 @@ export default function Show({ aiModel, auth, flash, initialData, repromptResult
                                     </div>
                                 </form>
                             </div>
-                        </div>
 
-                            {/* Result Display */}
-                            <div className="mt-8">
-                                <ResultDisplay 
-                                    generation={
-                                        (flash.generation_result || repromptResult) 
-                                            ? { ...(flash.generation_result || repromptResult), output_type: aiModel.output_type }
-                                            : null
-                                    }
-                                    error={flash.error}
-                                />
+                            {/* Right Column: Result */}
+                            <div className="rounded-2xl max-h-[calc(100vh-100px)] overflow-y-auto border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 lg:p-8 flex flex-col">
+                                <div className="flex items-center justify-between mb-6 border-b border-gray-50 dark:border-gray-700 pb-4">
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Result</h2>
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Your Credits</span>
+                                        <span className="text-lg font-black text-green-600">{user.credit_balance}</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex-grow">
+                                    <ResultDisplay 
+                                        generation={
+                                            (flash.generation_result || repromptResult) 
+                                                ? { ...(flash.generation_result || repromptResult), output_type: aiModel.output_type }
+                                                : null
+                                        }
+                                        error={flash.error}
+                                    />
+                                </div>
                             </div>
+
                         </div>
                     </div>
                 </div>

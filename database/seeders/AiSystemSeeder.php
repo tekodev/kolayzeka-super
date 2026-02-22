@@ -103,19 +103,36 @@ class AiSystemSeeder extends Seeder
                             ['value' => '2K', 'label' => '2K (2048x2048)'],
                             ['value' => '4K', 'label' => '4K (4096x4096)'],
                         ]
+                    ],
+                    [
+                        'key' => 'images',
+                        'type' => 'images',
+                        'label' => 'Reference Images',
+                        'required' => false,
+                        'description' => 'Image(s) passed to the model (can be mapped via merge_arrays)',
                     ]
                 ],
                 'field_mapping' => [
                     'prompt' => 'prompt',
                     'aspectRatio' => 'aspectRatio',
-                    'imageSize' => 'imageSize'
+                    'imageSize' => 'imageSize',
+                    'images' => 'images'
                 ],
                 // DYNAMIC TEMPLATE DEFINITION FOR IMAGE GENERATION
                 'request_template' => [
                     'contents' => [
                         [
                             'parts' => [
-                                ['text' => '{{prompt}}']
+                                ['text' => '{{prompt}}'],
+                                [
+                                    '__spread__' => 'images',
+                                    'template' => [
+                                        'inline_data' => [
+                                            'mime_type' => '{{mime_type}}',
+                                            'data' => '{{base64}}'
+                                        ]
+                                    ]
+                                ]
                             ]
                         ]
                     ],
@@ -216,18 +233,21 @@ class AiSystemSeeder extends Seeder
                 'durationSeconds' => 'durationSeconds',
             ],
             // Request Template (JSON Structure for Veo)
-            // Note: GoogleProvider replaces "{{image}}" with the entire image object.
-            // For Veo, we need to handle the structure matching inside GoogleProvider if it differs from Gemini.
-            // Assuming we will update GoogleProvider to output Veo-compatible structure for 'veo' models.
             'request_template' => [
                 'instances' => [[
                     'prompt' => '{{prompt}}',
-                    'image' => '{{image}}' // GoogleProvider will inject the image object here
+                    'image' => [
+                        '__spread__' => 'image',
+                        'template' => [
+                            'mimeType' => '{{mime_type}}',
+                            'bytesBase64Encoded' => '{{base64}}'
+                        ]
+                    ]
                 ]],
                 'parameters' => [
                     'aspectRatio' => '{{aspectRatio}}',
                     'personGeneration' => 'allow_adult',
-                    'durationSeconds' => '{{durationSeconds|int}}' // Strings are fine, API casts them
+                    'durationSeconds' => '{{durationSeconds|int}}'
                 ]
             ],
             'response_path' => null, 

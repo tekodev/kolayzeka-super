@@ -48,8 +48,6 @@ class ProviderApiService
         // Increase memory limit for handling large image payloads (Gemini)
         ini_set('memory_limit', '4096M');
 
-        Log::info("[ProviderApiService] Executing via Factory", ['type' => $provider->type, 'model_id' => $providerModelId]);
-
         $providerInstance = $this->providerFactory->make($provider->type);
         return $providerInstance->generate($provider, $providerModelId, $payload);
     }

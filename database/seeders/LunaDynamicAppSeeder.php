@@ -42,13 +42,13 @@ No wide-angle distortion.
 No perspective warping.
 No optical deformation.
 
-The subject is the exact same woman shown in {identity_reference_images}.
+The subject is the exact same woman shown in {luna_identity}.
 Her facial structure, bone anatomy, freckles, skin details, facial proportions,
 and hair must be ABSOLUTELY IDENTICAL to the reference images.
 The person must be unmistakably the same individual.
 Perfect identity consistency and absolute reference fidelity are mandatory.
 
-She is wearing the exact clothing from {image}.
+She is wearing the exact clothing from {luna_clothing}.
 The fabric texture, weave, stitching, seams, drape, folds, thickness,
 and patterns must be a PIXEL-PERFECT MATCH to the reference images.
 Flawless real-world material reproduction down to the smallest detail.
@@ -91,6 +91,24 @@ No identity drift.
 Absolute realism and maximum fidelity to all reference images.";
 
         $uiSchema = [
+            [
+                'key' => 'luna_identity',
+                'type' => 'image',
+                'label' => 'Identity Reference Image',
+                'section' => '1. Karakter Referansı',
+                'default' => null,
+                'required' => true,
+                'description' => 'Yüzünü ve temel görünümünü almak istediğiniz ana karakter fotoğrafı.'
+            ],
+            [
+                'key' => 'luna_clothing',
+                'type' => 'image',
+                'label' => 'Kıyafet Referansı',
+                'section' => '1. Karakter Referansı',
+                'default' => null,
+                'required' => false,
+                'description' => 'Karakterin giymesini istediğiniz kıyafeti gösteren fotoğraf.'
+            ],
             // 1. Composition
             [
                 'key' => 'framing_instruction',
@@ -137,13 +155,6 @@ Absolute realism and maximum fidelity to all reference images.";
                 'default' => '50mm prime lens',
                 'description' => 'Ideal for portraits'
             ],
-            [
-                'key' => 'image',
-                'type' => 'images',
-                'label' => 'Kıyafet Referansları',
-                'section' => '3. Kimlik & Referanslar',
-                'description' => 'Kıyafet referans görselleri (Opsiyonel)'
-            ],
             // 4. Scene & Pose
             [
                 'key' => 'location_description',
@@ -183,17 +194,19 @@ Absolute realism and maximum fidelity to all reference images.";
             ['app_id' => $app->id, 'order' => 1],
             [
                 'ai_model_id' => $model->id,
+                'name' => 'Adım 1: Fotoğraf Oluştur',
                 'prompt_template' => $promptTemplate,
                 'ui_schema' => $uiSchema,
                 'requires_approval' => false,
                 'config' => [
                     'prompt' => ['source' => 'template', 'label' => 'Prompt'],
-                    'identity_reference_images' => [
-                        'source' => 'static',
-                        'label' => 'Identity Reference Images',
-                        'value' => ['app_static_assets/luna_identity.jpg', 'app_static_assets/luna_face.png']
+                    'luna_identity' => ['source' => 'user', 'label' => 'Identity Reference Image'],
+                    'luna_clothing' => ['source' => 'user', 'label' => 'Clothing Reference Image'],
+                    'images' => [
+                        'source' => 'merge_arrays',
+                        'label' => 'Reference Images',
+                        'merge_keys' => ['luna_identity', 'luna_clothing']
                     ],
-                    'image' => ['source' => 'user', 'label' => 'Reference Image (Optional)'], // Reference Image (Optional) field in model
                     'aspectRatio' => ['source' => 'user', 'label' => 'Aspect Ratio', 'value' => '9:16'],
                     'imageSize' => ['source' => 'user', 'label' => 'Image Size', 'value' => '1K'],
                     'framing_instruction' => ['source' => 'user', 'label' => 'Çerçeveleme Tipi', 'value' => 'Head to toe shot'],
@@ -215,45 +228,14 @@ Absolute realism and maximum fidelity to all reference images.";
                 ['app_id' => $app->id, 'order' => 2],
                 [
                     'ai_model_id' => $veoModel->id,
-                    'name' => 'Video Generation',
+                    'name' => 'Adım 2: Video Oluştur',
                     'requires_approval' => true,
-                    'ui_schema' => [
-                        [
-                            'key' => 'video_prompt',
-                            'type' => 'text',
-                            'label' => 'Video Hareket / Stil (Prompt)',
-                            'section' => 'Video Ayarları'
-                        ],
-                        [
-                            'key' => 'aspect',
-                            'type' => 'select',
-                            'label' => 'Aspect Ratio',
-                            'section' => 'Video Ayarları',
-                            'options' => [
-                                ['label' => '9:16 (Vertical)', 'value' => '9:16'],
-                                ['label' => '16:9 (Horizontal)', 'value' => '16:9'],
-                                ['label' => '1:1 (Square)', 'value' => '1:1']
-                            ],
-                            'default' => '9:16'
-                        ],
-                        [
-                            'key' => 'duration',
-                            'type' => 'select',
-                            'label' => 'Duration',
-                            'section' => 'Video Ayarları',
-                            'options' => [
-                                ['label' => '4 Seconds', 'value' => '4'],
-                                ['label' => '6 Seconds', 'value' => '6'],
-                                ['label' => '8 Seconds', 'value' => '8']
-                            ],
-                            'default' => '6'
-                        ]
-                    ],
+                    'ui_schema' => [],
                     'config' => [
-                        'prompt' => ['source' => 'user', 'input_key' => 'video_prompt', 'label' => 'Video Prompt'],
+                        'prompt' => ['source' => 'user', 'label' => 'Video Prompt'],
                         'image' => ['source' => 'previous', 'step_index' => 1, 'output_key' => 'result', 'label' => 'Source Image'],
-                        'aspectRatio' => ['source' => 'user', 'input_key' => 'aspect', 'label' => 'Aspect Ratio'],
-                        'durationSeconds' => ['source' => 'user', 'input_key' => 'duration', 'label' => 'Duration'],
+                        'aspectRatio' => ['source' => 'user', 'label' => 'Aspect Ratio'],
+                        'durationSeconds' => ['source' => 'user', 'label' => 'Duration'],
                     ]
                 ]
             );

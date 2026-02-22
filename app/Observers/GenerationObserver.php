@@ -40,8 +40,26 @@ class GenerationObserver
                 Log::error("[GenerationObserver] Generation {$generation->id} failed for AppExecution {$generation->app_execution_id}");
                 $execution = \App\Models\AppExecution::find($generation->app_execution_id);
                 if ($execution) {
-                    $execution->update(['status' => 'failed']);
-                    Log::error("[GenerationObserver] Marking AppExecution {$execution->id} as FAILED and broadcasting.");
+                    $history = $execution->history ?? [];
+                    
+                    // Save specific step failure
+                    $history[$execution->current_step] = array_merge(
+                        is_array($generation->output_data) ? $generation->output_data : [],
+                        [
+                            'status' => 'failed',
+                            'error_message' => $generation->error_message ?? 'Bilinmeyen bir hata oluştu.'
+                        ]
+                    );
+
+                    // Also keep global error message for banners
+                    $history['error_message'] = $generation->error_message ?? 'Bilinmeyen bir hata oluştu.';
+                    
+                    $execution->update([
+                        'status' => 'failed',
+                        'history' => $history
+                    ]);
+                    
+                    Log::error("[GenerationObserver] Marking AppExecution {$execution->id} as FAILED and broadcasting. Reason: " . $history['error_message']);
                     \App\Events\AppExecutionCompleted::dispatch($execution);
                 }
              }

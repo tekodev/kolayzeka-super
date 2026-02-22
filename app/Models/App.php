@@ -11,6 +11,7 @@ class App extends Model
         'slug',
         'description',
         'icon',
+        'image_url',
         'cost_multiplier',
         'is_active',
     ];

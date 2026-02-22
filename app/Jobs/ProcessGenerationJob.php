@@ -44,29 +44,12 @@ class ProcessGenerationJob implements ShouldQueue
                 throw new \Exception('Model or user not found');
             }
 
-            // Use GenerationService to process
+            // Use GenerationService to process and update the existing generation
             $generationService = app(GenerationService::class);
-            $result = $generationService->generate($user, $model, $generation->input_data);
-            
-            // Update generation with result
-            $generation->update([
-                'status' => 'completed',
-                'output_data' => $result->output_data,
-                'thumbnail_url' => $result->thumbnail_url,
-                'provider_request_body' => $result->provider_request_body,
-                'provider_cost_usd' => $result->provider_cost_usd,
-                'user_credit_cost' => $result->user_credit_cost,
-                'profit_usd' => $result->profit_usd,
-                'duration' => $result->duration,
-            ]);
+            $generation = $generationService->generate($user, $model, $generation->input_data, $generation);
 
             // Broadcast completion event
             broadcast(new GenerationCompleted($generation, $this->userId))->toOthers();
-            
-            Log::info("[ProcessGenerationJob] Generation completed successfully", [
-                'generation_id' => $this->generationId,
-                'has_thumbnail' => !empty($result->thumbnail_url),
-            ]);
 
         } catch (\Exception $e) {
             Log::error("[ProcessGenerationJob] Generation failed", [
@@ -74,10 +57,13 @@ class ProcessGenerationJob implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
 
-            $generation->update([
-                'status' => 'failed',
-                'output_data' => ['error' => $e->getMessage()],
-            ]);
+            $generation->refresh();
+            if ($generation->status !== 'failed') {
+                $generation->update([
+                    'status' => 'failed',
+                    'output_data' => ['error' => $e->getMessage()],
+                ]);
+            }
 
             // Broadcast failure event
             broadcast(new GenerationCompleted($generation, $this->userId))->toOthers();

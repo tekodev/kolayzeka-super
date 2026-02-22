@@ -42,10 +42,10 @@ export default function GenerationsIndex({ auth, generations }: Props) {
                             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No generations yet</h3>
                             <p className="mt-2 text-gray-500 dark:text-gray-400">Create your first AI masterpiece today!</p>
                             <Link 
-                                href={route('dashboard')} 
+                                href={route('apps.index')} 
                                 className="mt-6 inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 transition"
                             >
-                                Go to Dashboard
+                                Explore Apps
                             </Link>
                          </div>
                     ) : (
