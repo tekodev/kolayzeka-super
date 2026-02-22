@@ -13,11 +13,13 @@ class AppExecution extends Model
         'current_step',
         'inputs',
         'history',
+        'generation_ids',
     ];
 
     protected $casts = [
         'inputs' => 'array',
         'history' => 'array',
+        'generation_ids' => 'array',
         'current_step' => 'integer',
     ];
 

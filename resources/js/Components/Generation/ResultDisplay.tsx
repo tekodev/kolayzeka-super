@@ -18,10 +18,8 @@ export default function ResultDisplay({ generation, error, onCreateVideo }: Resu
     };
 
     const handleDownload = () => {
-        if (!generation.id) return;
-        // Manual URL construction to avoid potential Ziggy issues
-        const url = `/apps/download/${generation.id}`;
-        window.location.href = url;
+        if (!generation?.id) return;
+        window.location.href = `/apps/download/${generation.id}`;
     };
 
     const isSafetyError = generation?.output_data?.candidates?.[0]?.finishReason === 'IMAGE_SAFETY';
@@ -144,7 +142,7 @@ export default function ResultDisplay({ generation, error, onCreateVideo }: Resu
                             <p className="text-indigo-600 dark:text-indigo-400 font-medium animate-pulse">
                                 Sihir hazırlanıyor... Lütfen bekleyin.
                             </p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500">Video oluşturma 1-6 dakika sürebilir.</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">İşlem 1-6 dakika sürebilir.</p>
                         </div>
                     ) : generation.status === 'failed' ? (
                         <div className="text-center space-y-4 max-w-lg mx-auto p-6 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-100 dark:border-red-800/50">

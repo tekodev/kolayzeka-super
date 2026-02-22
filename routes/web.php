@@ -44,6 +44,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/apps/execution/{execution}/approve', [AppsController::class, 'approve'])->name('apps.execution.approve');
     Route::get('/apps/execution/{execution}', [AppsController::class, 'executionStatus'])->name('apps.execution.status');
     Route::post('/apps/{slug}/execute', [AppsController::class, 'execute'])->name('apps.execute');
+    Route::get('/apps/{slug}/docs', [AppsController::class, 'docs'])->name('apps.docs');
     Route::get('/apps/{slug}', [AppsController::class, 'show'])->name('apps.show');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

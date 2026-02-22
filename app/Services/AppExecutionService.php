@@ -37,7 +37,9 @@ class AppExecutionService
 
     public function approveStep(AppExecution $execution)
     {
-        if ($execution->status !== 'waiting_approval') {
+        // Allow retrying failed steps too
+        $previousStatus = $execution->status;
+        if (!in_array($previousStatus, ['waiting_approval', 'failed'])) {
             return;
         }
         
@@ -47,8 +49,10 @@ class AppExecutionService
         // Broadcast that we are resuming
         \App\Events\AppExecutionCompleted::dispatch($execution);
 
-        // Resume with skipApproval = true
-        \App\Jobs\ProcessAppExecutionJob::dispatch($execution->id, true);
+        // If was failed: re-run current_step (which still points to the failed one)
+        // If was waiting_approval: skip approval and advance to next step
+        $skipApproval = $previousStatus !== 'failed';
+        \App\Jobs\ProcessAppExecutionJob::dispatch($execution->id, $skipApproval);
     }
 
     /**
@@ -138,10 +142,15 @@ class AppExecutionService
 
         // Update History
         $history = $execution->history ?? [];
-        $history[$step->order] = $generation->output_data; 
+        $history[$step->order] = $generation->output_data;
+        
+        // Track generation IDs per step for download links
+        $generationIds = $execution->generation_ids ?? [];
+        $generationIds[$step->order] = $generation->id;
         
         $execution->update([
             'history' => $history,
+            'generation_ids' => $generationIds,
             'current_step' => $execution->current_step + 1,
         ]);
 

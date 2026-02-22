@@ -7,7 +7,7 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import ResultDisplay from '@/Components/Generation/ResultDisplay';
 import GenerationProgress from '@/Components/Generation/GenerationProgress';
-import AppDocs from '@/Components/Generation/AppDocs';
+
 import { toast } from 'react-hot-toast';
 import DragDropUploader from '@/Components/Generation/DragDropUploader';
 // Define types for App and Steps
@@ -69,6 +69,7 @@ interface AppExecution {
     history: Record<string, any>; // keyed by step order
     inputs: Record<string, any>;
     app_id: number;
+    generation_ids?: Record<string | number, number>;
 }
 
 export default function DynamicApp({ auth, app }: { auth: any; app: App }) {
@@ -80,7 +81,7 @@ export default function DynamicApp({ auth, app }: { auth: any; app: App }) {
     // State for live execution tracking
     const [currentExecution, setCurrentExecution] = useState<AppExecution | null>(execution || null);
     const [isPolling, setIsPolling] = useState(false);
-    const [activeTab, setActiveTab] = useState<'config' | 'docs'>('config');
+
     const resultsRef = useRef<HTMLDivElement>(null);
 
     // Initial load from URL for notification clicks
@@ -175,15 +176,18 @@ export default function DynamicApp({ auth, app }: { auth: any; app: App }) {
     });
 
     // We only use data from useForm for the ACTIVE entry step
-    const getInitialData = () => {
+    const getInitialDataForStep = (stepOrder: number) => {
+        const fields = computeFieldsForStep(stepOrder);
         const initialDetails: Record<string, any> = {};
-        activeFormFields.forEach(field => {
+        fields.forEach(field => {
             if (field.type === 'image' || field.type === 'file') initialDetails[field.inputKey] = null;
             else if (field.type === 'images' || field.type === 'files') initialDetails[field.inputKey] = [];
             else initialDetails[field.inputKey] = field.defaultValue ?? '';
         });
         return initialDetails;
     };
+
+    const getInitialData = () => getInitialDataForStep(activeDataEntryStep);
 
     // Note: useForm initialData won't dynamically update purely by ref, but we don't need it to. 
     // It will stay tracking whatever the current step form entries are. Since we redirect or update the execution
@@ -211,6 +215,18 @@ export default function DynamicApp({ auth, app }: { auth: any; app: App }) {
         }
     }, [currentExecution?.status, currentExecution?.id]);
 
+    // Re-initialize form defaults when user switches viewed step
+    useEffect(() => {
+        const newDefaults = getInitialDataForStep(viewedStepOrder);
+        Object.entries(newDefaults).forEach(([key, val]) => {
+            // Only set if the field isn't already set (user may have typed something)
+            if (data[key] === undefined || data[key] === '' || data[key] === null) {
+                setData(key as any, val);
+            }
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewedStepOrder]);
+
     useEffect(() => {
         if (flash.execution && resultsRef.current) {
             resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -234,6 +250,24 @@ export default function DynamicApp({ auth, app }: { auth: any; app: App }) {
         e.preventDefault();
         if(viewedStepOrder !== activeDataEntryStep) {
             toast.error("Can only submit active step.");
+            return;
+        }
+
+        // If execution is failed, re-approve to retry the step that failed
+        // (keeps Step 1 result and just re-runs the failed step)
+        if (currentExecution && currentExecution.status === 'failed') {
+            // Restore to waiting_approval state so we can re-approve the step
+            inertiaRouter.post(route('apps.execution.approve', currentExecution.id), data, {
+                preserveScroll: true,
+                onSuccess: (page) => {
+                    const updated = (page.props.flash as any).execution;
+                    if (updated) {
+                        setCurrentExecution(updated);
+                        toast.success('Retrying...');
+                    }
+                },
+                onError: () => toast.error('Could not retry. Please try again.')
+            });
             return;
         }
         
@@ -392,25 +426,11 @@ export default function DynamicApp({ auth, app }: { auth: any; app: App }) {
                         <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-indigo-700 to-indigo-900 border-b border-indigo-800"></div>
                     )}
                     <div className="absolute inset-0 h-full flex items-center justify-start">
-                        <div className="container mx-auto px-4 md:px-8 mt-6 md:mt-10 max-w-7xl flex items-center justify-between">
-                            <div className="text-start">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-3 md:mb-4">
-                                    <h1 className="text-lg md:text-3xl font-bold text-white">{app.name}</h1>
-                                </div>
-                                <p className="text-xs md:text-sm lg:text-base text-white/90 mb-4 max-w-2xl leading-relaxed">
-                                    {app.description}
-                                </p>
-                            </div>
-                            
-                            <button 
-                                onClick={() => setActiveTab(activeTab === 'docs' ? 'config' : 'docs')}
-                                className="flex flex-col md:flex-row items-center gap-2 md:px-4 md:py-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl backdrop-blur-md transition-all font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 md:text-sm text-xs"
-                            >
-                                <svg className="w-5 h-5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                                </svg>
-                                {activeTab === 'docs' ? 'Configuration' : 'Documentation'}
-                            </button>
+                        <div className="container mx-auto px-4 md:px-8 mt-6 md:mt-10 max-w-7xl">
+                            <h1 className="text-lg md:text-3xl font-bold text-white mb-3">{app.name}</h1>
+                            <p className="text-xs md:text-sm lg:text-base text-white/90 max-w-2xl leading-relaxed">
+                                {app.description}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -454,19 +474,85 @@ export default function DynamicApp({ auth, app }: { auth: any; app: App }) {
                 {/* Main Content Area (Form & Result) */}
                 <div className="pt-8 px-4 sm:px-6 lg:px-8 pb-16">
                     <div className="mx-auto max-w-7xl">
-                        {activeTab === 'config' ? (
-                            <div className="grid md:grid-cols-2 gap-6 lg:gap-8 align-top">
-                                
+                        <div className="grid md:grid-cols-2 gap-6 lg:gap-8 align-top">
+                            
+                                {/* Left Column: Result */}
+                                <div className="rounded-2xl max-h-[calc(100vh-100px)] overflow-y-auto border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 lg:p-8 flex flex-col" ref={resultsRef}>
+                                    <div className="flex items-center justify-between mb-6 border-b border-gray-50 dark:border-gray-700 pb-4">
+                                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Result</h2>
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Your Credits</span>
+                                            <span className="text-lg font-black text-green-600">{user.credit_balance}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-grow">
+                                        {(flash.error || (currentExecution?.status === 'failed' && currentExecution?.history?.error_message)) && (
+                                            <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-6 rounded-2xl shadow-sm mb-6 animate-fade-in-up">
+                                                <div className="flex gap-4">
+                                                    <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0">
+                                                        <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm text-red-700 dark:text-red-400 font-bold uppercase tracking-widest mb-1">İşlem Hatası</p>
+                                                        <p className="text-sm text-red-600 dark:text-red-400 leading-relaxed">{flash.error || currentExecution?.history?.error_message}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {isViewedProcessing ? (
+                                            <GenerationProgress processing={true} progressPercentage={progress?.percentage || 0} />
+                                        ) : resultToDisplay ? (
+                                            <ResultDisplay 
+                                                generation={{ 
+                                                    ...resultToDisplay, 
+                                                    id: currentExecution?.generation_ids?.[viewedStepOrder],
+                                                    status: resultToDisplay.status || 'completed', 
+                                                    output_data: resultToDisplay,
+                                                    ai_model: viewedStep?.ai_model,
+                                                    created_at: resultToDisplay?.created_at || currentExecution?.history?.created_at || new Date().toISOString()
+                                                }}
+                                                onCreateVideo={viewedStepOrder === 1 && currentExecution?.status === 'waiting_approval' ? () => setViewedStepOrder(2) : undefined}
+                                            />
+                                        ) : viewedStepOrder > currentStepOrder ? (
+                                            <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-gray-400 dark:text-gray-500">
+                                                <svg className="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                <p className="font-medium text-center">Complete previous steps first<br/>to generate this result.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-gray-400 dark:text-gray-500">
+                                                <svg className="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                </svg>
+                                                <p className="font-medium">Ready for Magic</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                                 {/* Left Column: Form */}
                                 <div className="rounded-2xl max-h-[calc(100vh-100px)] overflow-y-auto border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-6 lg:px-8 lg:py-8 flex flex-col relative">
                                     <div className="flex items-center justify-between mb-6 border-b border-gray-50 dark:border-gray-700 pb-4">
-                                        <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                            <svg className="w-5 h-5 text-indigo-500 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                                            </svg>
-                                            {app.steps.length > 1 ? `${getStepName(viewedStep)} - Configuration` : 'Configuration'}
-                                        </h2>
-                                    </div>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                        <svg className="w-5 h-5 text-indigo-500 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                        </svg>
+                                        {app.steps.length > 1 ? `${getStepName(viewedStep)} - Configuration` : 'Configuration'}
+                                    </h2>
+                                    <Link
+                                        href={route('apps.docs', app.slug)}
+                                        className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                        </svg>
+                                        Docs
+                                    </Link>
+                                </div>
 
                                     <form onSubmit={handleSubmit} className="flex flex-col flex-grow relative">
                                         <div className="flex-grow space-y-8">
@@ -529,67 +615,7 @@ export default function DynamicApp({ auth, app }: { auth: any; app: App }) {
                                     </form>
                                 </div>
 
-                                {/* Right Column: Result */}
-                                <div className="rounded-2xl max-h-[calc(100vh-100px)] overflow-y-auto border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 lg:p-8 flex flex-col" ref={resultsRef}>
-                                    <div className="flex items-center justify-between mb-6 border-b border-gray-50 dark:border-gray-700 pb-4">
-                                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Result</h2>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Your Credits</span>
-                                            <span className="text-lg font-black text-green-600">{user.credit_balance}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex-grow">
-                                        {(flash.error || (currentExecution?.status === 'failed' && currentExecution?.history?.error_message)) && (
-                                            <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-6 rounded-2xl shadow-sm mb-6 animate-fade-in-up">
-                                                <div className="flex gap-4">
-                                                    <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0">
-                                                        <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                                        </svg>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm text-red-700 dark:text-red-400 font-bold uppercase tracking-widest mb-1">İşlem Hatası</p>
-                                                        <p className="text-sm text-red-600 dark:text-red-400 leading-relaxed">{flash.error || currentExecution?.history?.error_message}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {isViewedProcessing ? (
-                                            <GenerationProgress processing={true} progressPercentage={progress?.percentage || 0} />
-                                        ) : resultToDisplay ? (
-                                            <ResultDisplay 
-                                                generation={{ 
-                                                    ...resultToDisplay, 
-                                                    status: resultToDisplay.status || 'completed', 
-                                                    output_data: resultToDisplay,
-                                                    ai_model: viewedStep?.ai_model,
-                                                    created_at: resultToDisplay?.created_at || currentExecution?.history?.created_at || new Date().toISOString()
-                                                }}
-                                                onCreateVideo={viewedStepOrder === 1 && currentExecution?.status === 'waiting_approval' ? () => setViewedStepOrder(2) : undefined}
-                                            />
-                                        ) : viewedStepOrder > currentStepOrder ? (
-                                            <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-gray-400 dark:text-gray-500">
-                                                <svg className="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                <p className="font-medium text-center">Complete previous steps first<br/>to generate this result.</p>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-gray-400 dark:text-gray-500">
-                                                <svg className="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                                </svg>
-                                                <p className="font-medium">Ready for Magic</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
                             </div>
-                        ) : (
-                            <AppDocs app={app} fields={activeFormFields} />
-                        )}
                     </div>
                 </div>
             </div>

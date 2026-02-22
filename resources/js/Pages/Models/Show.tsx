@@ -123,8 +123,30 @@ export default function Show({ aiModel, auth, flash, initialData, repromptResult
                 <div className="pt-8 px-4 sm:px-6 lg:px-8 pb-16">
                     <div className="mx-auto max-w-7xl">
                         <div className="grid md:grid-cols-2 gap-6 lg:gap-8 align-top">
-                            
-                            {/* Left Column: Form */}
+
+                            {/* Left Column: Result */}
+                            <div className="rounded-2xl max-h-[calc(100vh-100px)] overflow-y-auto border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 lg:p-8 flex flex-col">
+                                <div className="flex items-center justify-between mb-6 border-b border-gray-50 dark:border-gray-700 pb-4">
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Result</h2>
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Your Credits</span>
+                                        <span className="text-lg font-black text-green-600">{user.credit_balance}</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex-grow">
+                                    <ResultDisplay 
+                                        generation={
+                                            (flash.generation_result || repromptResult) 
+                                                ? { ...(flash.generation_result || repromptResult), output_type: aiModel.output_type }
+                                                : null
+                                        }
+                                        error={flash.error}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Right Column: Form */}
                             <div className="rounded-2xl max-h-[calc(100vh-100px)] overflow-y-auto border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-6 lg:px-8 lg:py-8 flex flex-col">
                                 <div className="flex items-center justify-between mb-6 border-b border-gray-50 dark:border-gray-700 pb-4">
                                     <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -172,28 +194,6 @@ export default function Show({ aiModel, auth, flash, initialData, repromptResult
                                         </PrimaryButton>
                                     </div>
                                 </form>
-                            </div>
-
-                            {/* Right Column: Result */}
-                            <div className="rounded-2xl max-h-[calc(100vh-100px)] overflow-y-auto border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 lg:p-8 flex flex-col">
-                                <div className="flex items-center justify-between mb-6 border-b border-gray-50 dark:border-gray-700 pb-4">
-                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Result</h2>
-                                    <div className="flex flex-col items-end">
-                                        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Your Credits</span>
-                                        <span className="text-lg font-black text-green-600">{user.credit_balance}</span>
-                                    </div>
-                                </div>
-
-                                <div className="flex-grow">
-                                    <ResultDisplay 
-                                        generation={
-                                            (flash.generation_result || repromptResult) 
-                                                ? { ...(flash.generation_result || repromptResult), output_type: aiModel.output_type }
-                                                : null
-                                        }
-                                        error={flash.error}
-                                    />
-                                </div>
                             </div>
 
                         </div>
